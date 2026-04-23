@@ -3,6 +3,10 @@ A lossless photo editor for iOS.
 
 This is being built in public and is not yet ready for any real use.
 
+Use:
+
+* Use is not recommended right now, as this component is in its early stages. However, it's being distributed under the MIT license.
+
 1.0 Goals:
 
 * Cropping.
