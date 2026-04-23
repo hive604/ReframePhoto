@@ -8,9 +8,19 @@
 import SwiftUI
 import PhotosUI
 
+private struct SavedEditorSettings: Codable {
+    var losslessEdits: LosslessEdits
+    var dimEnabled: Bool
+    var dimOpacity: Double
+    var blurEnabled: Bool
+    var blurRadius: Double
+    var desaturateEnabled: Bool
+    var desaturateAmount: Double
+}
+
 struct ContentView: View {
     // Store only a lightweight reference (filename) in UserDefaults
-    @AppStorage("selectedImageFilename") private var selectedImageFilename: String?
+    @AppStorage("selectedImageUUIDString") private var selectedImageUUIDString: String?
 
     // In-memory image for display
     @State private var displayedImage: UIImage?
@@ -20,13 +30,26 @@ struct ContentView: View {
     @State private var losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
     @State private var isShowingEditor = false
 
-    private var editsURL: URL { documentsDirectory().appendingPathComponent("edits.json") }
+    // Cropping effects state
+    @State private var croppingEffects: CroppingEffectSet = []
+    @State private var dimEnabled: Bool = false
+    @State private var dimOpacity: Double = 0.45
+    @State private var blurEnabled: Bool = false
+    @State private var blurRadius: Double = 8
+    @State private var desaturateEnabled: Bool = false
+    @State private var desaturateAmount: Double = 1
 
     fileprivate func clearImage() {
         withAnimation {
             deleteImage()
+            losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
             displayedImage = nil
-            selectedImageFilename = nil
+            selectedImageUUIDString = nil
+
+            croppingEffects = []
+            dimEnabled = false; dimOpacity = 0.45
+            blurEnabled = false; blurRadius = 8
+            desaturateEnabled = false; desaturateAmount = 1
         }
     }
 
@@ -53,6 +76,66 @@ struct ContentView: View {
                         )
                         .padding(.horizontal)
                     }
+                }
+
+                // Effects controls
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: $dimEnabled) {
+                        HStack {
+                            Text("Dim")
+                            Spacer()
+                            Slider(value: $dimOpacity, in: 0...1) { Text("") }
+                                .frame(width: 160)
+                                .disabled(!dimEnabled)
+                        }
+                    }
+
+                    Toggle(isOn: $blurEnabled) {
+                        HStack {
+                            Text("Blur")
+                            Spacer()
+                            Slider(value: $blurRadius, in: 0...20) { Text("") }
+                                .frame(width: 160)
+                                .disabled(!blurEnabled)
+                        }
+                    }
+
+                    Toggle(isOn: $desaturateEnabled) {
+                        HStack {
+                            Text("Desaturate")
+                            Spacer()
+                            Slider(value: $desaturateAmount, in: 0...1) { Text("") }
+                                .frame(width: 160)
+                                .disabled(!desaturateEnabled)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .frame(maxWidth: 400)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .onChange(of: dimEnabled) { _, _ in
+                    rebuildEffects()
+                    persistEditorSettings()
+                }
+                .onChange(of: dimOpacity) { _, _ in
+                    rebuildEffects()
+                    persistEditorSettings()
+                }
+                .onChange(of: blurEnabled) { _, _ in
+                    rebuildEffects()
+                    persistEditorSettings()
+                }
+                .onChange(of: blurRadius) { _, _ in
+                    rebuildEffects()
+                    persistEditorSettings()
+                }
+                .onChange(of: desaturateEnabled) { _, _ in
+                    rebuildEffects()
+                    persistEditorSettings()
+                }
+                .onChange(of: desaturateAmount) { _, _ in
+                    rebuildEffects()
+                    persistEditorSettings()
                 }
 
                 HStack {
@@ -88,12 +171,15 @@ struct ContentView: View {
             .task { loadImage() }
             .fullScreenCover(isPresented: $isShowingEditor) {
                 if let uiImage = displayedImage {
+                    let image = Image(uiImage: uiImage)
                     ReframePhotoEditor(
-                        image: Image(uiImage: uiImage),
+                        image: image,
+                        imageSize: uiImage.size,
                         edits: $losslessEdits,
+                        croppingEffects: croppingEffects,
                         onCancel: { isShowingEditor = false },
                         onConfirm: {
-                            persistLosslessEdits()
+                            persistEditorSettings()
                             isShowingEditor = false
                         }
                     )
@@ -104,8 +190,8 @@ struct ContentView: View {
              guard let item = photoItem else { return }
             do {
                 if let data = try await item.loadTransferable(type: Data.self) {
-                    let filename = try saveImage(data)
-                    selectedImageFilename = filename
+                    selectedImageUUIDString = UUID().uuidString
+                    try saveImage(data)
                     displayedImage = UIImage(data: data)
                 }
             } catch {
@@ -121,45 +207,77 @@ private extension ContentView {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     }
 
-    func saveImage(_ data: Data) throws -> String {
-        // Store the original bytes as-is with a neutral filename (no extension)
-        let filename = "selected_\(UUID().uuidString)"
-        let url = documentsDirectory().appendingPathComponent(filename)
-        try data.write(to: url, options: .atomic)
-        return filename
+    var imageURL: URL? {
+        selectedImageUUIDString != nil ? documentsDirectory().appendingPathComponent("selected_\(selectedImageUUIDString!)") : nil
     }
 
-    func persistLosslessEdits() {
+    private var settingsURL: URL? {
+        selectedImageUUIDString != nil ? documentsDirectory().appendingPathComponent("settings_\(selectedImageUUIDString!)") : nil
+    }
+
+    func saveImage(_ data: Data) throws {
+        // Store the original bytes as-is with a neutral filename (no extension)
+        try data.write(to: imageURL!, options: .atomic)
+    }
+
+    func persistEditorSettings() {
+        guard let settingsURL else { return }
+
+        let settings = SavedEditorSettings(
+            losslessEdits: losslessEdits,
+            dimEnabled: dimEnabled,
+            dimOpacity: dimOpacity,
+            blurEnabled: blurEnabled,
+            blurRadius: blurRadius,
+            desaturateEnabled: desaturateEnabled,
+            desaturateAmount: desaturateAmount
+        )
+
         do {
-            let data = try JSONEncoder().encode(losslessEdits)
-            try data.write(to: editsURL, options: .atomic)
+            let data = try JSONEncoder().encode(settings)
+            try data.write(to: settingsURL, options: .atomic)
         } catch {
-            print("Failed to persist edits: \(error)")
+            print("Failed to persist settings: \(error)")
         }
     }
 
     func loadImage() {
-        guard let filename = selectedImageFilename else { return }
-        let url = documentsDirectory().appendingPathComponent(filename)
-        if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+        if let imageURL, let data = try? Data(contentsOf: imageURL), let image = UIImage(data: data) {
             displayedImage = image
         } else {
-            // File missing or unreadable; clean up the stored reference
-            selectedImageFilename = nil
-            displayedImage = nil
+            clearImage()
         }
 
-        if let data = try? Data(contentsOf: editsURL) {
-            if let decoded = try? JSONDecoder().decode(LosslessEdits.self, from: data) {
-                losslessEdits = decoded
+        if let settingsURL, let data = try? Data(contentsOf: settingsURL) {
+            if let decoded = try? JSONDecoder().decode(SavedEditorSettings.self, from: data) {
+                losslessEdits = decoded.losslessEdits
+                dimEnabled = decoded.dimEnabled
+                dimOpacity = decoded.dimOpacity
+                blurEnabled = decoded.blurEnabled
+                blurRadius = decoded.blurRadius
+                desaturateEnabled = decoded.desaturateEnabled
+                desaturateAmount = decoded.desaturateAmount
+                rebuildEffects()
             }
         }
     }
 
     func deleteImage() {
-        guard let filename = selectedImageFilename else { return }
-        let url = documentsDirectory().appendingPathComponent(filename)
-        try? FileManager.default.removeItem(at: url)
+        if let imageURL {
+            try? FileManager.default.removeItem(at: imageURL)
+        }
+        if let settingsURL {
+            try? FileManager.default.removeItem(at: settingsURL)
+        }
+        selectedImageUUIDString = nil
+    }
+
+    func rebuildEffects() {
+        var set: CroppingEffectSet = []
+        if dimEnabled { set.insert(.dim(dimOpacity)) }
+        if blurEnabled { set.insert(.blur(blurRadius)) }
+        if desaturateEnabled { set.insert(.desaturate(desaturateAmount)) }
+        croppingEffects = set
     }
 }
 
