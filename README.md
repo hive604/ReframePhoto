@@ -3,6 +3,18 @@ A lossless photo editor for iOS.
 
 This is being built in public and is not yet ready for any real use.
 
+1.0 Goals:
+
+* Cropping.
+* Zooming.
+
+Eventually:
+
+* Brightness & contrast.
+* Color saturation.
+* Color hue shift.
+* Skewing.
+
 Issues:
 
 * Device rotation doesn't rotate crop well.
