@@ -10,6 +10,7 @@ Use:
 1.0 Goals:
 
 * Cropping.
+* Cropping to common fixed aspect ratios.
 * Zooming.
 
 Eventually:
