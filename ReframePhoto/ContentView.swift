@@ -140,7 +140,7 @@ struct ContentView: View {
 
                 HStack {
                     PhotosPicker(selection: $photoItem, matching: .images, preferredItemEncoding: .automatic) {
-                        Label("Pick Photo", systemImage: "photo")
+                        Label("Pick…", systemImage: "photo")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)

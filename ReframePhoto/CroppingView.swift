@@ -12,15 +12,15 @@ struct CroppingView: View {
     let fittedSize: CGSize
     let rotation: Angle
     let geometrySize: CGSize
-    let displayedImageSize: CGSize
     let cropFrame: CGRect
-    let cropHandleSize: CGFloat
     let croppingEffects: CroppingEffectSet
     let onReset: () -> Void
     let onTranslate: (CGSize) -> Void
-    let onResize: (CropCornerHandle, CGSize) -> Void
+    let onResizeCorner: (CropCornerHandle, CGSize) -> Void
     let onResizeEdge: (CropEdgeHandle, CGSize) -> Void
     let onEndGesture: () -> Void
+
+    private let cropHandleSize: CGFloat = 28
 
     var body: some View {
         VStack(spacing: 0) {
@@ -103,7 +103,7 @@ struct CroppingView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        onResize(handle, value.translation)
+                        onResizeCorner(handle, value.translation)
                     }
                     .onEnded { _ in
                         onEndGesture()

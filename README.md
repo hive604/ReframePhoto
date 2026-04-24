@@ -1,5 +1,7 @@
 # ReframePhoto
-A lossless photo editor for iOS.
+A lossless photo editor component for iOS.
+
+The idea is to build a reusable component that can be used in any application to provide lossless photo editing; if the app remembers the source photo and `LosslessEdits`, it can reproduce the final image.
 
 This is being built in public and is not yet ready for any real use.
 

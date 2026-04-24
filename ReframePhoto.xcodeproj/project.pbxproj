@@ -11,6 +11,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		4860FEE62F9BA48D0061F443 /* DemoApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DemoApp;
+			sourceTree = "<group>";
+		};
 		48BE6A962F980A0200E87943 /* ReframePhoto */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ReframePhoto;
@@ -34,6 +39,7 @@
 			children = (
 				48BE6A962F980A0200E87943 /* ReframePhoto */,
 				48BE6A952F980A0200E87943 /* Products */,
+				4860FEE62F9BA48D0061F443 /* DemoApp */,
 			);
 			sourceTree = "<group>";
 		};
@@ -61,6 +67,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				4860FEE62F9BA48D0061F443 /* DemoApp */,
 				48BE6A962F980A0200E87943 /* ReframePhoto */,
 			);
 			name = ReframePhoto;
