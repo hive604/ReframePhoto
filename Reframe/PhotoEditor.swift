@@ -1,5 +1,5 @@
 //
-//  ReframePhotoEditor.swift
+//  PhotoEditor.swift
 //  ReframePhoto
 //
 //  Created by Steven Fisher on 2026-04-21.
@@ -8,11 +8,11 @@
 import SwiftUI
 import os
 
-struct ReframePhotoEditor: View {
+public struct PhotoEditor: View {
     static let checkmark = "checkmark.circle.fill"
     static let xmark = "xmark.circle.fill"
 
-    private static let logger = Logger(subsystem: "com.hive604.ReframePhoto", category: "ReframePhotoEditor")
+    private static let logger = Logger(subsystem: "com.hive604.Reframe", category: "PhotoEditor")
     private let minimumNormalizedCropSize: CGFloat = 0.15
     private let minimumStoredCropDimension: CGFloat = 0.0001
 
@@ -21,13 +21,14 @@ struct ReframePhotoEditor: View {
     }
 
     let image: Image
+    let sourceUIImage: UIImage?
     let imageSize: CGSize
     @Binding var edits: LosslessEdits
     let onCancel: (() -> Void)?
     let onConfirm: (() -> Void)?
 
     @State private var draftEdits: LosslessEdits
-    @State private var tool: ToolMode = .tilt
+    @State private var tool: ToolMode = .adjust
 
     @State private var draftCropFrame: CGRect?
     @State private var cropGestureStartFrame: CGRect?
@@ -35,13 +36,30 @@ struct ReframePhotoEditor: View {
     let croppingEffects: CroppingEffectSet
 
     private enum ToolMode: String, CaseIterable, Identifiable {
-        case tilt
         case crop
+        case adjust
 
         var id: String { rawValue }
     }
 
-    init(
+    public init(
+        uiImage: UIImage,
+        edits: Binding<LosslessEdits>,
+        croppingEffects: CroppingEffectSet = CroppingEffectSet([.dim(opacity: 0.4)]),
+        onCancel: (() -> Void)? = nil,
+        onConfirm: (() -> Void)? = nil
+    ) {
+        image = Image(uiImage: uiImage)
+        sourceUIImage = uiImage
+        imageSize = uiImage.size
+        _edits = edits
+        self.croppingEffects = croppingEffects
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        _draftEdits = State(initialValue: edits.wrappedValue)
+    }
+
+    public init(
         image: Image,
         imageSize: CGSize,
         edits: Binding<LosslessEdits>,
@@ -50,6 +68,7 @@ struct ReframePhotoEditor: View {
         onConfirm: (() -> Void)? = nil
     ) {
         self.image = image
+        sourceUIImage = nil
         self.imageSize = imageSize
         _edits = edits
         self.croppingEffects = croppingEffects
@@ -58,19 +77,20 @@ struct ReframePhotoEditor: View {
         _draftEdits = State(initialValue: edits.wrappedValue)
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             topBar
+                .zIndex(1)
 
             editorImage
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .zIndex(0)
         }
         .background(Color.black)
         .onChange(of: edits) { _, newValue in
             Self.log("edits -> \(edits)")
             draftEdits = newValue
-            draftCropFrame = nil
-            cropGestureStartFrame = nil
+            resetTransientCropState()
         }
         .environment(\.colorScheme, .dark)
     }
@@ -78,7 +98,7 @@ struct ReframePhotoEditor: View {
 
 // MARK: - Layout
 
-private extension ReframePhotoEditor {
+private extension PhotoEditor {
     var topBar: some View {
         HStack {
             cancelButton
@@ -86,11 +106,11 @@ private extension ReframePhotoEditor {
             Spacer()
 
             Picker("Tool", selection: $tool) {
-                Text("Tilt").tag(ToolMode.tilt)
                 Text("Crop").tag(ToolMode.crop)
+                Text("Adjust").tag(ToolMode.adjust)
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 200)
+            .frame(maxWidth: 280)
 
             Spacer()
 
@@ -112,9 +132,10 @@ private extension ReframePhotoEditor {
                 if tool == .crop {
                     CroppingView(
                         image: image,
+                        sourceUIImage: sourceUIImage,
                         fittedSize: fittedSize,
-                        rotation: draftEdits.rotation,
                         geometrySize: geometry.size,
+                        edits: $draftEdits,
                         cropFrame: currentCropFrame,
                         croppingEffects: croppingEffects,
                         onReset: {
@@ -122,10 +143,7 @@ private extension ReframePhotoEditor {
                             draftCropFrame = nil
                         },
                         onTranslate: { (translation: CGSize) in
-                            if cropGestureStartFrame == nil {
-                                cropGestureStartFrame = currentCropFrame
-                            }
-
+                            beginCropGesture(from: currentCropFrame)
                             updateCropFrame(
                                 byTranslatingFrom: cropGestureStartFrame ?? currentCropFrame,
                                 translation: translation,
@@ -134,10 +152,7 @@ private extension ReframePhotoEditor {
                             )
                         },
                         onResizeCorner: { (handle: CropCornerHandle, translation: CGSize) in
-                            if cropGestureStartFrame == nil {
-                                cropGestureStartFrame = currentCropFrame
-                            }
-
+                            beginCropGesture(from: currentCropFrame)
                             updateCropFrame(
                                 byResizing: handle,
                                 from: cropGestureStartFrame ?? currentCropFrame,
@@ -147,9 +162,7 @@ private extension ReframePhotoEditor {
                             )
                         },
                         onResizeEdge: { (handle: CropEdgeHandle, translation: CGSize) in
-                            if cropGestureStartFrame == nil {
-                                cropGestureStartFrame = currentCropFrame
-                            }
+                            beginCropGesture(from: currentCropFrame)
                             updateCropFrame(
                                 byResizing: handle,
                                 from: cropGestureStartFrame ?? currentCropFrame,
@@ -163,11 +176,12 @@ private extension ReframePhotoEditor {
                         }
                     )
                 } else {
-                    TiltingView(
+                    AdjustView(
                         image: image,
+                        sourceUIImage: sourceUIImage,
                         imageSize: imageSize,
                         geometrySize: geometry.size,
-                        rotationDegrees: rotationDegreesBinding,
+                        edits: $draftEdits,
                         cropFrame: currentCropFrame
                     )
                 }
@@ -177,8 +191,7 @@ private extension ReframePhotoEditor {
                 if newValue == .crop {
                     draftCropFrame = effectiveCropFrame(in: geometry.size, visibleImageSize: visibleImageSize)
                 } else {
-                    draftCropFrame = nil
-                    cropGestureStartFrame = nil
+                    resetTransientCropState()
                 }
             }
         }
@@ -191,7 +204,18 @@ private extension ReframePhotoEditor {
 
 // MARK: - Crop State
 
-private extension ReframePhotoEditor {
+private extension PhotoEditor {
+    func beginCropGesture(from cropFrame: CGRect) {
+        if cropGestureStartFrame == nil {
+            cropGestureStartFrame = cropFrame
+        }
+    }
+
+    func resetTransientCropState() {
+        draftCropFrame = nil
+        cropGestureStartFrame = nil
+    }
+
     func effectiveCropFrame(in geometrySize: CGSize, visibleImageSize: CGSize) -> CGRect {
         if let draftCropFrame, draftCropFrame.width > 1, draftCropFrame.height > 1 {
             return draftCropFrame
@@ -214,7 +238,23 @@ private extension ReframePhotoEditor {
 
 // MARK: - Crop Mutation
 
-private extension ReframePhotoEditor {
+private extension PhotoEditor {
+    func commitConstrainedCropFrame(
+        _ cropFrame: CGRect,
+        moving: CropFrameMutation.MovingEdges,
+        geometrySize: CGSize,
+        visibleImageSize: CGSize
+    ) {
+        let constrained = CropFrameMutation.constrainedCropFrame(
+            cropFrame,
+            moving: moving,
+            within: CGRect(origin: .zero, size: geometrySize),
+            visibleImageSize: visibleImageSize,
+            rotation: draftEdits.rotation
+        )
+        commitCropFrame(constrained, geometrySize: geometrySize, visibleImageSize: visibleImageSize)
+    }
+
     func commitCropFrame(_ cropFrame: CGRect, geometrySize: CGSize, visibleImageSize: CGSize) {
         let bounds = CGRect(origin: .zero, size: geometrySize)
         let clamped = CropFrameMutation.clamped(cropFrame: cropFrame.standardized, to: bounds)
@@ -228,7 +268,7 @@ private extension ReframePhotoEditor {
 
     func updateCropFrame(byTranslatingFrom cropFrame: CGRect, translation: CGSize, geometrySize: CGSize, visibleImageSize: CGSize) {
         let updated = CropFrameMutation.translatedCropFrame(cropFrame, by: translation)
-        commitCropFrame(updated, geometrySize: geometrySize, visibleImageSize: visibleImageSize)
+        commitConstrainedCropFrame(updated, moving: .all, geometrySize: geometrySize, visibleImageSize: visibleImageSize)
     }
 
     private func updateCropFrame(byResizing handle: CropCornerHandle, from cropFrame: CGRect, translation: CGSize, geometrySize: CGSize, visibleImageSize: CGSize) {
@@ -239,7 +279,7 @@ private extension ReframePhotoEditor {
             minimumNormalizedCropSize: minimumNormalizedCropSize,
             visibleImageSize: visibleImageSize
         )
-        commitCropFrame(updated, geometrySize: geometrySize, visibleImageSize: visibleImageSize)
+        commitConstrainedCropFrame(updated, moving: .corner(handle), geometrySize: geometrySize, visibleImageSize: visibleImageSize)
     }
 
     private func updateCropFrame(byResizing handle: CropEdgeHandle, from cropFrame: CGRect, translation: CGSize, geometrySize: CGSize, visibleImageSize: CGSize) {
@@ -250,7 +290,7 @@ private extension ReframePhotoEditor {
             minimumNormalizedCropSize: minimumNormalizedCropSize,
             visibleImageSize: visibleImageSize
         )
-        commitCropFrame(updated, geometrySize: geometrySize, visibleImageSize: visibleImageSize)
+        commitConstrainedCropFrame(updated, moving: .edge(handle), geometrySize: geometrySize, visibleImageSize: visibleImageSize)
     }
 }
 
@@ -258,6 +298,32 @@ private extension ReframePhotoEditor {
 // MARK: - Crop Frame Mutation Helper
 
 private enum CropFrameMutation {
+    enum MovingEdges {
+        case all
+        case corner(CropCornerHandle)
+        case edge(CropEdgeHandle)
+
+        var affectedEdges: [CropEdgeHandle] {
+            switch self {
+            case .all:
+                return [.top, .bottom, .left, .right]
+            case let .corner(handle):
+                switch handle {
+                case .topLeft:
+                    return [.top, .left]
+                case .topRight:
+                    return [.top, .right]
+                case .bottomLeft:
+                    return [.bottom, .left]
+                case .bottomRight:
+                    return [.bottom, .right]
+                }
+            case let .edge(handle):
+                return [handle]
+            }
+        }
+    }
+
     static func translatedCropFrame(_ cropFrame: CGRect, by translation: CGSize) -> CGRect {
         cropFrame.offsetBy(dx: translation.width, dy: translation.height)
     }
@@ -384,32 +450,121 @@ private enum CropFrameMutation {
 
         return clamped
     }
-}
 
-// MARK: - Bindings
+    static func constrainedCropFrame(
+        _ cropFrame: CGRect,
+        moving: MovingEdges,
+        within bounds: CGRect,
+        visibleImageSize: CGSize,
+        rotation: Angle
+    ) -> CGRect {
+        var constrained = clamped(cropFrame: cropFrame.standardized, to: bounds)
+        let extrema = rotatedImageExtrema(
+            in: bounds,
+            visibleImageSize: visibleImageSize,
+            rotation: rotation
+        )
 
-private extension ReframePhotoEditor {
-    var rotationDegreesBinding: Binding<Double> {
-        Binding(
-            get: { draftEdits.rotation.degrees },
-            set: {
-                draftEdits.rotation = .degrees($0)
-                Self.log("rotate now \($0)")
+        switch moving {
+        case .all:
+            if constrained.minX < extrema.minX {
+                constrained.origin.x = extrema.minX
             }
+            if constrained.maxX > extrema.maxX {
+                constrained.origin.x = extrema.maxX - constrained.width
+            }
+            if constrained.minY < extrema.minY {
+                constrained.origin.y = extrema.minY
+            }
+            if constrained.maxY > extrema.maxY {
+                constrained.origin.y = extrema.maxY - constrained.height
+            }
+        case .corner, .edge:
+            for edge in moving.affectedEdges {
+                switch edge {
+                case .top:
+                    constrained = clampTopEdge(of: constrained, toAtLeast: extrema.minY)
+                case .bottom:
+                    constrained = clampBottomEdge(of: constrained, toAtMost: extrema.maxY)
+                case .left:
+                    constrained = clampLeftEdge(of: constrained, toAtLeast: extrema.minX)
+                case .right:
+                    constrained = clampRightEdge(of: constrained, toAtMost: extrema.maxX)
+                }
+            }
+        }
+
+        return clamped(cropFrame: constrained, to: bounds)
+    }
+
+    private static func clampTopEdge(of cropFrame: CGRect, toAtLeast minimumY: CGFloat) -> CGRect {
+        let maxY = cropFrame.maxY
+        let minY = max(cropFrame.minY, minimumY)
+        return CGRect(x: cropFrame.minX, y: minY, width: cropFrame.width, height: maxY - minY)
+    }
+
+    private static func clampBottomEdge(of cropFrame: CGRect, toAtMost maximumY: CGFloat) -> CGRect {
+        let maxY = min(cropFrame.maxY, maximumY)
+        return CGRect(x: cropFrame.minX, y: cropFrame.minY, width: cropFrame.width, height: maxY - cropFrame.minY)
+    }
+
+    private static func clampLeftEdge(of cropFrame: CGRect, toAtLeast minimumX: CGFloat) -> CGRect {
+        let maxX = cropFrame.maxX
+        let minX = max(cropFrame.minX, minimumX)
+        return CGRect(x: minX, y: cropFrame.minY, width: maxX - minX, height: cropFrame.height)
+    }
+
+    private static func clampRightEdge(of cropFrame: CGRect, toAtMost maximumX: CGFloat) -> CGRect {
+        let maxX = min(cropFrame.maxX, maximumX)
+        return CGRect(x: cropFrame.minX, y: cropFrame.minY, width: maxX - cropFrame.minX, height: cropFrame.height)
+    }
+
+    private static func rotatedImageExtrema(
+        in bounds: CGRect,
+        visibleImageSize: CGSize,
+        rotation: Angle
+    ) -> CGRect {
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let halfWidth = visibleImageSize.width / 2
+        let halfHeight = visibleImageSize.height / 2
+        let cosine = cos(rotation.radians)
+        let sine = sin(rotation.radians)
+
+        let corners = [
+            CGPoint(x: -halfWidth, y: -halfHeight),
+            CGPoint(x: halfWidth, y: -halfHeight),
+            CGPoint(x: halfWidth, y: halfHeight),
+            CGPoint(x: -halfWidth, y: halfHeight)
+        ].map { point in
+            CGPoint(
+                x: center.x + (point.x * cosine) - (point.y * sine),
+                y: center.y + (point.x * sine) + (point.y * cosine)
+            )
+        }
+
+        let minX = corners.map(\.x).min() ?? bounds.minX
+        let maxX = corners.map(\.x).max() ?? bounds.maxX
+        let minY = corners.map(\.y).min() ?? bounds.minY
+        let maxY = corners.map(\.y).max() ?? bounds.maxY
+
+        return CGRect(
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
         )
     }
 }
 
 // MARK: - Buttons
 
-private extension ReframePhotoEditor {
+private extension PhotoEditor {
     var cancelButton: some View {
         CircularSymbolButton(systemName: Self.xmark) {
             Self.log("tapped cancel")
             draftEdits = edits
-            tool = .tilt
-            draftCropFrame = nil
-            cropGestureStartFrame = nil
+            tool = .adjust
+            resetTransientCropState()
             onCancel?()
         }
         .accessibilityLabel("Cancel")
@@ -419,9 +574,8 @@ private extension ReframePhotoEditor {
         CircularSymbolButton(systemName: Self.checkmark) {
             Self.log("tapped accept")
             edits = draftEdits
-            tool = .tilt
-            draftCropFrame = nil
-            cropGestureStartFrame = nil
+            tool = .adjust
+            resetTransientCropState()
             onConfirm?()
         }
         .accessibilityLabel("OK")
@@ -431,7 +585,7 @@ private extension ReframePhotoEditor {
 // MARK: - Preview
 
 #Preview {
-    ReframePhotoEditor(
+    PhotoEditor(
         image: Image(systemName: "photo"),
         imageSize: CGSize(width: 1200, height: 800),
         edits: .constant(LosslessEdits(crop: nil, rotation: .zero)),

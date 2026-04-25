@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import Reframe
 
 private struct SavedEditorSettings: Codable {
     var losslessEdits: LosslessEdits
@@ -57,8 +58,9 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 16) {
                 Group {
-                    if let uiImage = displayedImage {
-                        Image(uiImage: uiImage)
+                    if let uiImage = displayedImage,
+                       let rendered = uiImage.applying(losslessEdits, outputSize: uiImage.size) {
+                        Image(uiImage:rendered)
                             .resizable()
                             .scaledToFit()
                             .frame(maxWidth: .infinity)
@@ -78,35 +80,37 @@ struct ContentView: View {
                     }
                 }
 
-                // Effects controls
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle(isOn: $dimEnabled) {
-                        HStack {
-                            Text("Dim")
-                            Spacer()
-                            Slider(value: $dimOpacity, in: 0...1) { Text("") }
-                                .frame(width: 160)
-                                .disabled(!dimEnabled)
+                GroupBox("Crop Tool Options") {
+                    // Effects controls
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: $dimEnabled) {
+                            HStack {
+                                Text("Dim")
+                                Spacer()
+                                Slider(value: $dimOpacity, in: 0...1) { Text("") }
+                                    .frame(width: 160)
+                                    .disabled(!dimEnabled)
+                            }
                         }
-                    }
 
-                    Toggle(isOn: $blurEnabled) {
-                        HStack {
-                            Text("Blur")
-                            Spacer()
-                            Slider(value: $blurRadius, in: 0...20) { Text("") }
-                                .frame(width: 160)
-                                .disabled(!blurEnabled)
+                        Toggle(isOn: $blurEnabled) {
+                            HStack {
+                                Text("Blur")
+                                Spacer()
+                                Slider(value: $blurRadius, in: 0...20) { Text("") }
+                                    .frame(width: 160)
+                                    .disabled(!blurEnabled)
+                            }
                         }
-                    }
 
-                    Toggle(isOn: $desaturateEnabled) {
-                        HStack {
-                            Text("Desaturate")
-                            Spacer()
-                            Slider(value: $desaturateAmount, in: 0...1) { Text("") }
-                                .frame(width: 160)
-                                .disabled(!desaturateEnabled)
+                        Toggle(isOn: $desaturateEnabled) {
+                            HStack {
+                                Text("Desaturate")
+                                Spacer()
+                                Slider(value: $desaturateAmount, in: 0...1) { Text("") }
+                                    .frame(width: 160)
+                                    .disabled(!desaturateEnabled)
+                            }
                         }
                     }
                 }
@@ -171,10 +175,8 @@ struct ContentView: View {
             .task { loadImage() }
             .fullScreenCover(isPresented: $isShowingEditor) {
                 if let uiImage = displayedImage {
-                    let image = Image(uiImage: uiImage)
-                    ReframePhotoEditor(
-                        image: image,
-                        imageSize: uiImage.size,
+                    Reframe.PhotoEditor(
+                        uiImage: uiImage,
                         edits: $losslessEdits,
                         croppingEffects: croppingEffects,
                         onCancel: { isShowingEditor = false },

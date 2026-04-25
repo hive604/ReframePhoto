@@ -9,9 +9,10 @@ import SwiftUI
 
 struct CroppingView: View {
     let image: Image
+    let sourceUIImage: UIImage?
     let fittedSize: CGSize
-    let rotation: Angle
     let geometrySize: CGSize
+    @Binding var edits: LosslessEdits
     let cropFrame: CGRect
     let croppingEffects: CroppingEffectSet
     let onReset: () -> Void
@@ -193,14 +194,14 @@ struct CroppingView: View {
     }
 
     private var baseImage: some View {
-        image
+        previewImage
             .resizable()
 #if DEBUG
             .border(.orange, width: 2)
 #endif
             .scaledToFit()
-            .scaleEffect(rotationFitScale(for: fittedSize, angle: rotation))
-            .rotationEffect(rotation)
+            .scaleEffect(rotationFitScale(for: fittedSize, angle: edits.rotation))
+            .rotationEffect(edits.rotation)
             .frame(width: geometrySize.width, height: geometrySize.height)
             .position(x: geometrySize.width / 2, y: geometrySize.height / 2)
     }
@@ -231,5 +232,14 @@ struct CroppingView: View {
             if case let .dim(opacity) = effect { return max(0, min(1, opacity)) }
         }
         return 0
+    }
+
+    private var previewImage: Image {
+        if let sourceUIImage,
+           let adjustedImage = sourceUIImage.applyingColorAdjustments(using: edits, targetSize: geometrySize) {
+            return Image(uiImage: adjustedImage)
+        }
+
+        return image
     }
 }

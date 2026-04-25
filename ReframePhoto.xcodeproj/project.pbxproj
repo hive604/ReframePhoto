@@ -6,8 +6,38 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4860FEF52F9BFDD90061F443 /* Reframe.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4860FEED2F9BFDD90061F443 /* Reframe.framework */; };
+		4860FEF62F9BFDD90061F443 /* Reframe.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4860FEED2F9BFDD90061F443 /* Reframe.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		4860FEF32F9BFDD90061F443 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 48BE6A8C2F980A0200E87943 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4860FEEC2F9BFDD90061F443;
+			remoteInfo = Reframe;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		4860FEFA2F9BFDD90061F443 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				4860FEF62F9BFDD90061F443 /* Reframe.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		48BE6A942F980A0200E87943 /* ReframePhoto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReframePhoto.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4860FEED2F9BFDD90061F443 /* Reframe.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Reframe.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		48BE6A942F980A0200E87943 /* DemoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,18 +46,26 @@
 			path = DemoApp;
 			sourceTree = "<group>";
 		};
-		48BE6A962F980A0200E87943 /* ReframePhoto */ = {
+		4860FEEE2F9BFDD90061F443 /* Reframe */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ReframePhoto;
+			path = Reframe;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4860FEEA2F9BFDD90061F443 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		48BE6A912F980A0200E87943 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4860FEF52F9BFDD90061F443 /* Reframe.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -37,7 +75,7 @@
 		48BE6A8B2F980A0200E87943 = {
 			isa = PBXGroup;
 			children = (
-				48BE6A962F980A0200E87943 /* ReframePhoto */,
+				4860FEEE2F9BFDD90061F443 /* Reframe */,
 				48BE6A952F980A0200E87943 /* Products */,
 				4860FEE62F9BA48D0061F443 /* DemoApp */,
 			);
@@ -46,35 +84,70 @@
 		48BE6A952F980A0200E87943 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				48BE6A942F980A0200E87943 /* ReframePhoto.app */,
+				48BE6A942F980A0200E87943 /* DemoApp.app */,
+				4860FEED2F9BFDD90061F443 /* Reframe.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
+/* Begin PBXHeadersBuildPhase section */
+		4860FEE82F9BFDD90061F443 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
 /* Begin PBXNativeTarget section */
-		48BE6A932F980A0200E87943 /* ReframePhoto */ = {
+		4860FEEC2F9BFDD90061F443 /* Reframe */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 48BE6A9F2F980A0400E87943 /* Build configuration list for PBXNativeTarget "ReframePhoto" */;
+			buildConfigurationList = 4860FEF72F9BFDD90061F443 /* Build configuration list for PBXNativeTarget "Reframe" */;
 			buildPhases = (
-				48BE6A902F980A0200E87943 /* Sources */,
-				48BE6A912F980A0200E87943 /* Frameworks */,
-				48BE6A922F980A0200E87943 /* Resources */,
+				4860FEE82F9BFDD90061F443 /* Headers */,
+				4860FEE92F9BFDD90061F443 /* Sources */,
+				4860FEEA2F9BFDD90061F443 /* Frameworks */,
+				4860FEEB2F9BFDD90061F443 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				4860FEE62F9BA48D0061F443 /* DemoApp */,
-				48BE6A962F980A0200E87943 /* ReframePhoto */,
+				4860FEEE2F9BFDD90061F443 /* Reframe */,
 			);
-			name = ReframePhoto;
+			name = Reframe;
+			packageProductDependencies = (
+			);
+			productName = Reframe;
+			productReference = 4860FEED2F9BFDD90061F443 /* Reframe.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		48BE6A932F980A0200E87943 /* DemoApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 48BE6A9F2F980A0400E87943 /* Build configuration list for PBXNativeTarget "DemoApp" */;
+			buildPhases = (
+				48BE6A902F980A0200E87943 /* Sources */,
+				48BE6A912F980A0200E87943 /* Frameworks */,
+				48BE6A922F980A0200E87943 /* Resources */,
+				4860FEFA2F9BFDD90061F443 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4860FEF42F9BFDD90061F443 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				4860FEE62F9BA48D0061F443 /* DemoApp */,
+			);
+			name = DemoApp;
 			packageProductDependencies = (
 			);
 			productName = LosslessPhotoEditor;
-			productReference = 48BE6A942F980A0200E87943 /* ReframePhoto.app */;
+			productReference = 48BE6A942F980A0200E87943 /* DemoApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -87,6 +160,9 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					4860FEEC2F9BFDD90061F443 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
 					48BE6A932F980A0200E87943 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -106,12 +182,20 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				48BE6A932F980A0200E87943 /* ReframePhoto */,
+				48BE6A932F980A0200E87943 /* DemoApp */,
+				4860FEEC2F9BFDD90061F443 /* Reframe */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4860FEEB2F9BFDD90061F443 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		48BE6A922F980A0200E87943 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -122,6 +206,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4860FEE92F9BFDD90061F443 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		48BE6A902F980A0200E87943 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -131,7 +222,91 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		4860FEF42F9BFDD90061F443 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4860FEEC2F9BFDD90061F443 /* Reframe */;
+			targetProxy = 4860FEF32F9BFDD90061F443 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		4860FEF82F9BFDD90061F443 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H25U5KDRF6;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
+				PRODUCT_BUNDLE_IDENTIFIER = com.hive604.Reframe;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INSTALL_MODULE = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Debug;
+		};
+		4860FEF92F9BFDD90061F443 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H25U5KDRF6;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
+				PRODUCT_BUNDLE_IDENTIFIER = com.hive604.Reframe;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INSTALL_MODULE = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
 		48BE6A9D2F980A0400E87943 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -320,6 +495,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		4860FEF72F9BFDD90061F443 /* Build configuration list for PBXNativeTarget "Reframe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4860FEF82F9BFDD90061F443 /* Debug */,
+				4860FEF92F9BFDD90061F443 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		48BE6A8F2F980A0200E87943 /* Build configuration list for PBXProject "ReframePhoto" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -329,7 +513,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		48BE6A9F2F980A0400E87943 /* Build configuration list for PBXNativeTarget "ReframePhoto" */ = {
+		48BE6A9F2F980A0400E87943 /* Build configuration list for PBXNativeTarget "DemoApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				48BE6AA02F980A0400E87943 /* Debug */,

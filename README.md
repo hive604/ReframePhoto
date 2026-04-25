@@ -9,23 +9,25 @@ Use:
 
 * Use is not recommended right now, as this component is in its early stages. However, it's being distributed under the MIT license.
 
-1.0 Goals:
+Features (current):
 
 * Cropping.
-* Cropping to common fixed aspect ratios.
+* Tilting.
 * Zooming.
-
-Eventually:
-
 * Brightness & contrast.
 * Color saturation.
-* Color hue shift.
+
+Features (1.0):
+
+* Cropping to common fixed aspect ratios.
+* Color hue shift / whitepoint adjustment.
+
+Features (future):
+
 * Skewing.
+* Other easy Core Image filters?
 
 Issues:
 
 * Device rotation doesn't rotate crop well.
-* Demo should use same lossless edits.
-* Crop should not allow more than one point per side to be out of limits.
-* Structure of files does not support component, demo as separate pieces.
 * Many others.
