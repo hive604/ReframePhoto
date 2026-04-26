@@ -11,6 +11,7 @@ import Reframe
 
 private struct SavedEditorSettings: Codable {
     var losslessEdits: LosslessEdits
+    var allowedAdjustmentRawValues: [String]
     var dimEnabled: Bool
     var dimOpacity: Double
     var blurEnabled: Bool
@@ -20,6 +21,15 @@ private struct SavedEditorSettings: Codable {
 }
 
 struct ContentView: View {
+    private enum OptionsPanel: String, CaseIterable, Identifiable {
+        case crop
+        case adjustments
+
+        var id: String { rawValue }
+
+        var title: String { rawValue.capitalized }
+    }
+
     // Store only a lightweight reference (filename) in UserDefaults
     @AppStorage("selectedImageUUIDString") private var selectedImageUUIDString: String?
 
@@ -30,6 +40,8 @@ struct ContentView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
     @State private var isShowingEditor = false
+    @State private var selectedPanel: OptionsPanel = .crop
+    @State private var enabledAdjustments = Set(PhotoEditConfiguration.Adjustment.allCases)
 
     // Cropping effects state
     @State private var croppingEffects: CroppingEffectSet = []
@@ -40,6 +52,23 @@ struct ContentView: View {
     @State private var desaturateEnabled: Bool = false
     @State private var desaturateAmount: Double = 1
 
+    private var cropEnabled: Binding<Bool> {
+        Binding(
+            get: { enabledAdjustments.contains(.crop) },
+            set: { isEnabled in
+                if isEnabled {
+                    enabledAdjustments.insert(.crop)
+                } else {
+                    enabledAdjustments.remove(.crop)
+                }
+            }
+        )
+    }
+
+    private var configurableAdjustments: [PhotoEditConfiguration.Adjustment] {
+        PhotoEditConfiguration.Adjustment.allCases.filter { $0 != .crop }
+    }
+
     fileprivate func clearImage() {
         withAnimation {
             deleteImage()
@@ -47,6 +76,7 @@ struct ContentView: View {
             displayedImage = nil
             selectedImageUUIDString = nil
 
+            enabledAdjustments = Set(PhotoEditConfiguration.Adjustment.allCases)
             croppingEffects = []
             dimEnabled = false; dimOpacity = 0.45
             blurEnabled = false; blurRadius = 8
@@ -80,36 +110,86 @@ struct ContentView: View {
                     }
                 }
 
-                GroupBox("Crop Tool Options") {
-                    // Effects controls
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle(isOn: $dimEnabled) {
-                            HStack {
-                                Text("Dim")
-                                Spacer()
-                                Slider(value: $dimOpacity, in: 0...1) { Text("") }
-                                    .frame(width: 160)
-                                    .disabled(!dimEnabled)
+                GroupBox("Editor Options") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Picker("Options Panel", selection: $selectedPanel) {
+                            ForEach(OptionsPanel.allCases) { panel in
+                                Text(panel.title).tag(panel)
                             }
                         }
+                        .pickerStyle(.segmented)
 
-                        Toggle(isOn: $blurEnabled) {
-                            HStack {
-                                Text("Blur")
-                                Spacer()
-                                Slider(value: $blurRadius, in: 0...20) { Text("") }
-                                    .frame(width: 160)
-                                    .disabled(!blurEnabled)
+                        if selectedPanel == .crop {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Toggle("Enable Crop Tool", isOn: cropEnabled)
+
+                                Divider()
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Toggle(isOn: $dimEnabled) {
+                                        HStack {
+                                            Text("Dim")
+                                            Spacer()
+                                            Slider(value: $dimOpacity, in: 0...1) { Text("") }
+                                                .frame(width: 160)
+                                                .disabled(!dimEnabled)
+                                        }
+                                    }
+
+                                    Toggle(isOn: $blurEnabled) {
+                                        HStack {
+                                            Text("Blur")
+                                            Spacer()
+                                            Slider(value: $blurRadius, in: 0...20) { Text("") }
+                                                .frame(width: 160)
+                                                .disabled(!blurEnabled)
+                                        }
+                                    }
+
+                                    Toggle(isOn: $desaturateEnabled) {
+                                        HStack {
+                                            Text("Desaturate")
+                                            Spacer()
+                                            Slider(value: $desaturateAmount, in: 0...1) { Text("") }
+                                                .frame(width: 160)
+                                                .disabled(!desaturateEnabled)
+                                        }
+                                    }
+                                }
+                                .disabled(!cropEnabled.wrappedValue)
+                                .opacity(cropEnabled.wrappedValue ? 1 : 0.45)
                             }
-                        }
+                        } else {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Button("All On") {
+                                        enabledAdjustments.formUnion(configurableAdjustments)
+                                    }
+                                    .buttonStyle(.bordered)
 
-                        Toggle(isOn: $desaturateEnabled) {
-                            HStack {
-                                Text("Desaturate")
-                                Spacer()
-                                Slider(value: $desaturateAmount, in: 0...1) { Text("") }
-                                    .frame(width: 160)
-                                    .disabled(!desaturateEnabled)
+                                    Button("All Off") {
+                                        enabledAdjustments.subtract(configurableAdjustments)
+                                    }
+                                    .buttonStyle(.bordered)
+
+                                    Spacer()
+                                }
+
+                                LazyVGrid(
+                                    columns: [
+                                        GridItem(.flexible(), spacing: 12, alignment: .leading),
+                                        GridItem(.flexible(), spacing: 12, alignment: .leading)
+                                    ],
+                                    alignment: .leading,
+                                    spacing: 8
+                                ) {
+                                    ForEach(configurableAdjustments) { adjustment in
+                                        Toggle(
+                                            adjustment.displayTitle,
+                                            isOn: adjustmentBinding(for: adjustment)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -117,6 +197,9 @@ struct ContentView: View {
                 .padding(.horizontal)
                 .frame(maxWidth: 400)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .onChange(of: enabledAdjustments) { _, _ in
+                    persistEditorSettings()
+                }
                 .onChange(of: dimEnabled) { _, _ in
                     rebuildEffects()
                     persistEditorSettings()
@@ -173,12 +256,16 @@ struct ContentView: View {
             }
             .navigationTitle("Photo Picker")
             .task { loadImage() }
-            .fullScreenCover(isPresented: $isShowingEditor) {
-                if let uiImage = displayedImage {
-                    Reframe.PhotoEditor(
-                        uiImage: uiImage,
+                .fullScreenCover(isPresented: $isShowingEditor) {
+                    if let uiImage = displayedImage {
+                        let config = PhotoEditConfiguration(
+                            croppingEffects: croppingEffects,
+                            allowedAdjustments: enabledAdjustments
+                        )
+                        Reframe.PhotoEditor(
+                            uiImage: uiImage,
                         edits: $losslessEdits,
-                        croppingEffects: croppingEffects,
+                        photoEditConfiguration: config,
                         onCancel: { isShowingEditor = false },
                         onConfirm: {
                             persistEditorSettings()
@@ -227,6 +314,7 @@ private extension ContentView {
 
         let settings = SavedEditorSettings(
             losslessEdits: losslessEdits,
+            allowedAdjustmentRawValues: enabledAdjustments.map(\.rawValue).sorted(),
             dimEnabled: dimEnabled,
             dimOpacity: dimOpacity,
             blurEnabled: blurEnabled,
@@ -253,6 +341,9 @@ private extension ContentView {
         if let settingsURL, let data = try? Data(contentsOf: settingsURL) {
             if let decoded = try? JSONDecoder().decode(SavedEditorSettings.self, from: data) {
                 losslessEdits = decoded.losslessEdits
+                enabledAdjustments = Set(
+                    decoded.allowedAdjustmentRawValues.compactMap(PhotoEditConfiguration.Adjustment.init(rawValue:))
+                )
                 dimEnabled = decoded.dimEnabled
                 dimOpacity = decoded.dimOpacity
                 blurEnabled = decoded.blurEnabled
@@ -281,8 +372,50 @@ private extension ContentView {
         if desaturateEnabled { set.insert(.desaturate(desaturateAmount)) }
         croppingEffects = set
     }
+
+    func adjustmentBinding(for adjustment: PhotoEditConfiguration.Adjustment) -> Binding<Bool> {
+        Binding(
+            get: { enabledAdjustments.contains(adjustment) },
+            set: { isEnabled in
+                if isEnabled {
+                    enabledAdjustments.insert(adjustment)
+                } else {
+                    enabledAdjustments.remove(adjustment)
+                }
+            }
+        )
+    }
 }
 
 #Preview {
     ContentView()
+}
+
+private extension PhotoEditConfiguration.Adjustment {
+    var displayTitle: String {
+        switch self {
+        case .crop:
+            return "Crop"
+        case .tilt:
+            return "Tilt"
+        case .brightness:
+            return "Brightness"
+        case .exposure:
+            return "Exposure"
+        case .contrast:
+            return "Contrast"
+        case .saturation:
+            return "Saturation"
+        case .vibrance:
+            return "Vibrance"
+        case .sharpness:
+            return "Sharpness"
+        case .warmth:
+            return "Warmth"
+        case .tint:
+            return "Tint"
+        @unknown default:
+            return rawValue.capitalized
+        }
+    }
 }

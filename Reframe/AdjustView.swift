@@ -13,10 +13,40 @@ struct AdjustView: View {
     private enum AdjustmentMode: String, CaseIterable, Identifiable {
         case tilt
         case brightness
+        case exposure
         case contrast
         case saturation
+        case vibrance
+        case sharpness
+        case warmth
+        case tint
 
         var id: String { rawValue }
+
+        init(_ adjustment: PhotoEditConfiguration.Adjustment) {
+            switch adjustment {
+            case .crop:
+                self = .tilt
+            case .tilt:
+                self = .tilt
+            case .brightness:
+                self = .brightness
+            case .exposure:
+                self = .exposure
+            case .contrast:
+                self = .contrast
+            case .saturation:
+                self = .saturation
+            case .vibrance:
+                self = .vibrance
+            case .sharpness:
+                self = .sharpness
+            case .warmth:
+                self = .warmth
+            case .tint:
+                self = .tint
+            }
+        }
 
         var title: String {
             switch self {
@@ -24,10 +54,20 @@ struct AdjustView: View {
                 return "Tilt"
             case .brightness:
                 return "Brightness"
+            case .exposure:
+                return "Exposure"
             case .contrast:
                 return "Contrast"
             case .saturation:
                 return "Saturation"
+            case .vibrance:
+                return "Vibrance"
+            case .sharpness:
+                return "Sharpness"
+            case .warmth:
+                return "Warmth"
+            case .tint:
+                return "Tint"
             }
         }
 
@@ -37,10 +77,64 @@ struct AdjustView: View {
                 return "rectangle.landscape.rotate"
             case .brightness:
                 return "sun.max"
+            case .exposure:
+                return "plusminus.circle"
             case .contrast:
                 return "circle.lefthalf.filled"
             case .saturation:
                 return "drop"
+            case .vibrance:
+                return "paintbrush"
+            case .sharpness:
+                return "righttriangle.fill"
+            case .warmth:
+                return "thermometer.variable"
+            case .tint:
+                return "drop.halffull"
+            }
+        }
+
+        var displayRange: ClosedRange<Double> {
+            switch self {
+            case .tilt:
+                return -15...15
+            case .brightness, .exposure, .vibrance, .warmth, .tint:
+                return -1...1
+            case .contrast, .saturation:
+                return 0...2
+            case .sharpness:
+                return 0...2
+            }
+        }
+
+        var defaultValue: Double {
+            switch self {
+            case .tilt, .brightness, .exposure, .vibrance, .sharpness, .warmth, .tint:
+                return 0.0
+            case .contrast, .saturation:
+                return 1.0
+            }
+        }
+    }
+
+    private enum AdjustmentSection: String, CaseIterable, Identifiable {
+        case geometry
+        case tone
+        case color
+        case whiteBalance
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .geometry:
+                return "Geometry"
+            case .tone:
+                return "Tone"
+            case .color:
+                return "Color"
+            case .whiteBalance:
+                return "White Balance"
             }
         }
     }
@@ -51,13 +145,26 @@ struct AdjustView: View {
     let geometrySize: CGSize
     @Binding var edits: LosslessEdits
     let cropFrame: CGRect
+    let allowedAdjustments: Set<PhotoEditConfiguration.Adjustment>
 
     @State private var selectedAdjustment: AdjustmentMode = .tilt
+    @State private var selectedSection: AdjustmentSection = .tone
 
     @ScaledMetric private var valueWidth = 52
     @ScaledMetric(relativeTo: .caption2) private var panelWidth: CGFloat = 520
     @ScaledMetric(relativeTo: .caption2) private var rowSpacing: CGFloat = 8
     @ScaledMetric(relativeTo: .caption2) private var panelPadding: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var sectionSpacing: CGFloat = 16
+
+    private var availableAdjustments: [AdjustmentMode] {
+        AdjustmentMode.allCases.filter { mode in
+            allowedAdjustments.contains(PhotoEditConfiguration.Adjustment(rawValue: mode.rawValue)!)
+        }
+    }
+
+    private var availableSections: [AdjustmentSection] {
+        AdjustmentSection.allCases.filter { !adjustments(for: $0).isEmpty }
+    }
 
     var body: some View {
         let fittedSize = aspectFitSize(for: imageSize, in: geometrySize)
@@ -108,6 +215,12 @@ struct AdjustView: View {
             .padding()
         }
         .frame(width: geometrySize.width, height: geometrySize.height)
+        .onAppear {
+            sanitizeSelection()
+        }
+        .onChange(of: availableAdjustments.map(\.rawValue)) { _, _ in
+            sanitizeSelection()
+        }
     }
 
     private var rotationBinding: Binding<Double> {
@@ -127,52 +240,53 @@ struct AdjustView: View {
     }
 
     private var regularControlsPanel: some View {
-        VStack(alignment: .leading, spacing: rowSpacing) {
-            Text("Adjust")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: rowSpacing) {
-                adjustmentSlider(
-                    title: "Tilt",
-                    systemImage: "rectangle.landscape.rotate",
-                    value: rotationBinding,
-                    range: -15...15,
-                    default: 0.0
-                )
-                adjustmentSlider(
-                    title: "Brightness",
-                    systemImage: "sun.max",
-                    value: $edits.brightness,
-                    range: -1...1,
-                    default: 0.0
-                )
-                adjustmentSlider(
-                    title: "Contrast",
-                    systemImage: "circle.lefthalf.filled",
-                    value: $edits.contrast,
-                    range: 0...2,
-                    default: 1.0
-                )
-                adjustmentSlider(
-                    title: "Saturation",
-                    systemImage: "drop",
-                    value: $edits.saturation,
-                    range: 0...2,
-                    default: 1.0
-                )
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            HStack(spacing: 8) {
+                ForEach(availableSections) { section in
+                    Button {
+                        withAnimation(.snappy(duration: 0.25)) {
+                            selectedSection = section
+                        }
+                    } label: {
+                        Text(section.title)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                selectedSection == section ? .white.opacity(0.18) : .white.opacity(0.08),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+
+            activeRegularSection
         }
+        .animation(.snappy(duration: 0.25), value: selectedSection)
     }
 
     private var compactControlsPanel: some View {
         VStack(alignment: .leading, spacing: rowSpacing) {
-            Picker("Adjustment", selection: $selectedAdjustment) {
-                ForEach(AdjustmentMode.allCases) { mode in
-                    Label(mode.title, systemImage: mode.systemImage).tag(mode)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(availableAdjustments) { mode in
+                        Button {
+                            selectedAdjustment = mode
+                        } label: {
+                            Label(mode.title, systemImage: mode.systemImage)
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    selectedAdjustment == mode ? .white.opacity(0.18) : .white.opacity(0.08),
+                                    in: Capsule()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .pickerStyle(.segmented)
 
             activeCompactSlider
         }
@@ -180,39 +294,106 @@ struct AdjustView: View {
 
     @ViewBuilder
     private var activeCompactSlider: some View {
-        switch selectedAdjustment {
+        if availableAdjustments.contains(selectedAdjustment) {
+            adjustmentSlider(for: selectedAdjustment)
+        }
+    }
+
+    @ViewBuilder
+    private var activeRegularSection: some View {
+        switch selectedSection {
+        case .geometry:
+            adjustmentSection {
+                sectionSliders(for: .geometry)
+            }
+        case .tone:
+            adjustmentSection {
+                sectionSliders(for: .tone)
+            }
+        case .color:
+            adjustmentSection {
+                sectionSliders(for: .color)
+            }
+        case .whiteBalance:
+            adjustmentSection {
+                sectionSliders(for: .whiteBalance)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func adjustmentSection(@ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: rowSpacing) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func sectionSliders(for section: AdjustmentSection) -> some View {
+        ForEach(adjustments(for: section)) { mode in
+            adjustmentSlider(for: mode)
+        }
+    }
+
+    @ViewBuilder
+    private func adjustmentSlider(for mode: AdjustmentMode) -> some View {
+        adjustmentSlider(
+            title: mode.title,
+            systemImage: mode.systemImage,
+            value: binding(for: mode),
+            range: mode.displayRange,
+            default: mode.defaultValue
+        )
+    }
+
+    private func binding(for mode: AdjustmentMode) -> Binding<Double> {
+        switch mode {
         case .tilt:
-            adjustmentSlider(
-                title: AdjustmentMode.tilt.title,
-                systemImage: AdjustmentMode.tilt.systemImage,
-                value: rotationBinding,
-                range: -15...15,
-                default: 0.0
-            )
+            return rotationBinding
         case .brightness:
-            adjustmentSlider(
-                title: AdjustmentMode.brightness.title,
-                systemImage: AdjustmentMode.brightness.systemImage,
-                value: $edits.brightness,
-                range: -1...1,
-                default: 0.0
-            )
+            return $edits.brightness
+        case .exposure:
+            return $edits.exposure
         case .contrast:
-            adjustmentSlider(
-                title: AdjustmentMode.contrast.title,
-                systemImage: AdjustmentMode.contrast.systemImage,
-                value: $edits.contrast,
-                range: 0...2,
-                default: 1.0
-            )
+            return $edits.contrast
         case .saturation:
-            adjustmentSlider(
-                title: AdjustmentMode.saturation.title,
-                systemImage: AdjustmentMode.saturation.systemImage,
-                value: $edits.saturation,
-                range: 0...2,
-                default: 1.0
-            )
+            return $edits.saturation
+        case .vibrance:
+            return $edits.vibrance
+        case .sharpness:
+            return $edits.sharpness
+        case .warmth:
+            return $edits.warmth
+        case .tint:
+            return $edits.tint
+        }
+    }
+
+    private func adjustments(for section: AdjustmentSection) -> [AdjustmentMode] {
+        availableAdjustments.filter { mode in
+            switch section {
+            case .geometry:
+                return mode == .tilt
+            case .tone:
+                return mode == .brightness || mode == .exposure || mode == .contrast || mode == .sharpness
+            case .color:
+                return mode == .saturation || mode == .vibrance
+            case .whiteBalance:
+                return mode == .warmth || mode == .tint
+            }
+        }
+    }
+
+    private func sanitizeSelection() {
+        if let firstAdjustment = availableAdjustments.first,
+           !availableAdjustments.contains(selectedAdjustment) {
+            selectedAdjustment = firstAdjustment
+        }
+
+        if let firstSection = availableSections.first,
+           !availableSections.contains(selectedSection) {
+            selectedSection = firstSection
         }
     }
 
@@ -232,7 +413,7 @@ struct AdjustView: View {
                 .frame(alignment: .leading)
             Slider(value: value, in: range)
             Text(value.wrappedValue, format: .number.precision(.fractionLength(2)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .monospacedDigit()
                 .frame(width: valueWidth, alignment: .trailing)
             let canReset = if let defaultValue, abs(defaultValue - value.wrappedValue) > 0.05 { true } else { false }

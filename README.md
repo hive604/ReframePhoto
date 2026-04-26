@@ -16,11 +16,13 @@ Features (current):
 * Zooming.
 * Brightness & contrast.
 * Color saturation.
+* Cropping to common fixed aspect ratios.
+* Color hue shift / whitepoint adjustment.
+* Persisting aspect ratio.
 
 Features (1.0):
 
-* Cropping to common fixed aspect ratios.
-* Color hue shift / whitepoint adjustment.
+* Complete?
 
 Features (future):
 

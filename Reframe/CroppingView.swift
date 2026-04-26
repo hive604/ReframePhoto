@@ -8,40 +8,46 @@
 import SwiftUI
 
 struct CroppingView: View {
+    private let minimumNormalizedCropSize: CGFloat = 0.15
+    private let minimumStoredCropDimension: CGFloat = 0.0001
+    private let cropHandleSize: CGFloat = 28
+    private let controlsAreaHeight: CGFloat = 76
+
     let image: Image
     let sourceUIImage: UIImage?
-    let fittedSize: CGSize
+    let imageSize: CGSize
     let geometrySize: CGSize
     @Binding var edits: LosslessEdits
-    let cropFrame: CGRect
+    @Binding var cropConstraint: CropConstraint
     let croppingEffects: CroppingEffectSet
-    let onReset: () -> Void
-    let onTranslate: (CGSize) -> Void
-    let onResizeCorner: (CropCornerHandle, CGSize) -> Void
-    let onResizeEdge: (CropEdgeHandle, CGSize) -> Void
-    let onEndGesture: () -> Void
 
-    private let cropHandleSize: CGFloat = 28
+    @State private var draftCropFrame: CGRect?
+    @State private var cropGestureStartFrame: CGRect?
+    @State private var isShowingAspectRatioPopover = false
 
     var body: some View {
+        let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: cropWorkspaceSize)
+        let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
+        let currentCropFrame = effectiveCropFrame(visibleImageSize: visibleImageSize)
+
         VStack(spacing: 0) {
             ZStack {
-                baseImage
+                baseImage(fittedSize: fittedSize)
 
                 if blurRadius > 0 || desaturateAmount > 0 {
-                    outsideCropEffectImage
+                    outsideCropEffectImage(fittedSize: fittedSize)
                         .mask(
                             CropDimmedAreaShape(
-                                outerRect: CGRect(origin: .zero, size: geometrySize),
-                                cropRect: cropFrame
+                                outerRect: cropWorkspaceRect,
+                                cropRect: currentCropFrame
                             )
                             .fill(style: FillStyle(eoFill: true, antialiased: false))
                         )
                 }
 
                 CropDimmedAreaShape(
-                    outerRect: CGRect(origin: .zero, size: geometrySize),
-                    cropRect: cropFrame
+                    outerRect: cropWorkspaceRect,
+                    cropRect: currentCropFrame
                 )
                 .fill(.black.opacity(dimOpacity), style: FillStyle(eoFill: true))
 
@@ -52,48 +58,123 @@ struct CroppingView: View {
                         Rectangle()
                             .stroke(.white, lineWidth: 2)
                     }
-                    .frame(width: cropFrame.width, height: cropFrame.height)
-                    .position(x: cropFrame.midX, y: cropFrame.midY)
+                    .frame(width: currentCropFrame.width, height: currentCropFrame.height)
+                    .position(x: currentCropFrame.midX, y: currentCropFrame.midY)
                     .gesture(
                         DragGesture()
                             .onChanged { value in
-                                onTranslate(value.translation)
+                                beginCropGesture(from: currentCropFrame)
+                                updateCropFrame(
+                                    byTranslatingFrom: cropGestureStartFrame ?? currentCropFrame,
+                                    translation: value.translation,
+                                    visibleImageSize: visibleImageSize
+                                )
                             }
                             .onEnded { _ in
-                                onEndGesture()
+                                cropGestureStartFrame = nil
                             }
                     )
 
-                cropEdgeHandle(.top)
-                cropEdgeHandle(.bottom)
-                cropEdgeHandle(.left)
-                cropEdgeHandle(.right)
+                cropEdgeHandle(.top, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+                cropEdgeHandle(.bottom, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+                cropEdgeHandle(.left, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+                cropEdgeHandle(.right, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
 
-                cropCornerHandle(.topLeft)
-                cropCornerHandle(.topRight)
-                cropCornerHandle(.bottomLeft)
-                cropCornerHandle(.bottomRight)
+                cropCornerHandle(.topLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+                cropCornerHandle(.topRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+                cropCornerHandle(.bottomLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+                cropCornerHandle(.bottomRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: cropWorkspaceSize.width, height: cropWorkspaceSize.height)
 
-            HStack {
-                Spacer()
-
-                Button("Reset Crop") {
-                    onReset()
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 20)
-            .background(.ultraThinMaterial)
+            controlsBar(currentCropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
         }
     }
 
-    private func cropCornerHandle(_ handle: CropCornerHandle) -> some View {
+    private var cropWorkspaceSize: CGSize {
+        CGSize(
+            width: geometrySize.width,
+            height: max(0, geometrySize.height - controlsAreaHeight)
+        )
+    }
+
+    private var cropWorkspaceRect: CGRect {
+        CGRect(origin: .zero, size: cropWorkspaceSize)
+    }
+
+    private func controlsBar(currentCropFrame: CGRect, visibleImageSize: CGSize) -> some View {
+        HStack {
+            Spacer()
+
+            Button("Aspect Ratio") {
+                isShowingAspectRatioPopover = true
+            }
+            .buttonStyle(.bordered)
+            .popover(isPresented: $isShowingAspectRatioPopover, arrowEdge: .bottom) {
+                aspectRatioPopover(currentCropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            }
+
+            Button("Reset Crop") {
+                edits.crop = nil
+                draftCropFrame = nil
+                cropGestureStartFrame = nil
+                cropConstraint = .freeform
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+    }
+
+    private func aspectRatioPopover(currentCropFrame: CGRect, visibleImageSize: CGSize) -> some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ],
+            spacing: 12
+        ) {
+            ForEach(CropConstraint.displayOrder, id: \.self) { constraint in
+                Button {
+                    cropConstraint = constraint
+                    updateCropFrame(
+                        for: constraint,
+                        from: currentCropFrame,
+                        visibleImageSize: visibleImageSize
+                    )
+                    isShowingAspectRatioPopover = false
+                } label: {
+                    HStack {
+                        Text(constraint.label)
+                            .font(.callout.weight(.medium))
+                        Spacer(minLength: 8)
+                        if cropConstraint == constraint {
+                            Image(systemName: "checkmark")
+                                .font(.caption.weight(.bold))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding()
+        .frame(width: 240)
+    }
+
+    private func cropCornerHandle(
+        _ handle: CropCornerHandle,
+        cropFrame: CGRect,
+        visibleImageSize: CGSize
+    ) -> some View {
         Circle()
             .fill(.white)
             .frame(width: cropHandleSize, height: cropHandleSize)
@@ -104,10 +185,16 @@ struct CroppingView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        onResizeCorner(handle, value.translation)
+                        beginCropGesture(from: cropFrame)
+                        updateCropFrame(
+                            byResizing: handle,
+                            from: cropGestureStartFrame ?? cropFrame,
+                            translation: value.translation,
+                            visibleImageSize: visibleImageSize
+                        )
                     }
                     .onEnded { _ in
-                        onEndGesture()
+                        cropGestureStartFrame = nil
                     }
             )
     }
@@ -115,40 +202,21 @@ struct CroppingView: View {
     private func position(for handle: CropCornerHandle, in cropFrame: CGRect) -> CGPoint {
         switch handle {
         case .topLeft:
-            return CGPoint(x: cropFrame.minX, y: cropFrame.minY)
+            CGPoint(x: cropFrame.minX, y: cropFrame.minY)
         case .topRight:
-            return CGPoint(x: cropFrame.maxX, y: cropFrame.minY)
+            CGPoint(x: cropFrame.maxX, y: cropFrame.minY)
         case .bottomLeft:
-            return CGPoint(x: cropFrame.minX, y: cropFrame.maxY)
+            CGPoint(x: cropFrame.minX, y: cropFrame.maxY)
         case .bottomRight:
-            return CGPoint(x: cropFrame.maxX, y: cropFrame.maxY)
+            CGPoint(x: cropFrame.maxX, y: cropFrame.maxY)
         }
     }
 
-    private func rotationFitScale(for size: CGSize, angle: Angle) -> CGFloat {
-        guard size.width > 0, size.height > 0 else { return 1 }
-
-        let rotatedSize = rotatedBoundingSize(for: size, angle: angle)
-        guard rotatedSize.width > 0, rotatedSize.height > 0 else { return 1 }
-
-        let horizontalScale = size.width / rotatedSize.width
-        let verticalScale = size.height / rotatedSize.height
-
-        return min(horizontalScale, verticalScale, 1)
-    }
-
-    private func rotatedBoundingSize(for size: CGSize, angle: Angle) -> CGSize {
-        let radians = angle.radians
-        let absoluteCosine = abs(cos(radians))
-        let absoluteSine = abs(sin(radians))
-
-        return CGSize(
-            width: size.width * absoluteCosine + size.height * absoluteSine,
-            height: size.width * absoluteSine + size.height * absoluteCosine
-        )
-    }
-
-    private func cropEdgeHandle(_ handle: CropEdgeHandle) -> some View {
+    private func cropEdgeHandle(
+        _ handle: CropEdgeHandle,
+        cropFrame: CGRect,
+        visibleImageSize: CGSize
+    ) -> some View {
         RoundedRectangle(cornerRadius: 3)
             .fill(.white)
             .frame(
@@ -163,10 +231,16 @@ struct CroppingView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        onResizeEdge(handle, value.translation)
+                        beginCropGesture(from: cropFrame)
+                        updateCropFrame(
+                            byResizing: handle,
+                            from: cropGestureStartFrame ?? cropFrame,
+                            translation: value.translation,
+                            visibleImageSize: visibleImageSize
+                        )
                     }
                     .onEnded { _ in
-                        onEndGesture()
+                        cropGestureStartFrame = nil
                     }
             )
     }
@@ -174,45 +248,155 @@ struct CroppingView: View {
     private func edgeHandleSize(for handle: CropEdgeHandle) -> CGSize {
         switch handle {
         case .top, .bottom:
-            return CGSize(width: cropHandleSize * 1.6, height: cropHandleSize * 0.6)
+            CGSize(width: cropHandleSize * 1.6, height: cropHandleSize * 0.6)
         case .left, .right:
-            return CGSize(width: cropHandleSize * 0.6, height: cropHandleSize * 1.6)
+            CGSize(width: cropHandleSize * 0.6, height: cropHandleSize * 1.6)
         }
     }
 
     private func position(for handle: CropEdgeHandle, in cropFrame: CGRect) -> CGPoint {
         switch handle {
         case .top:
-            return CGPoint(x: cropFrame.midX, y: cropFrame.minY)
+            CGPoint(x: cropFrame.midX, y: cropFrame.minY)
         case .bottom:
-            return CGPoint(x: cropFrame.midX, y: cropFrame.maxY)
+            CGPoint(x: cropFrame.midX, y: cropFrame.maxY)
         case .left:
-            return CGPoint(x: cropFrame.minX, y: cropFrame.midY)
+            CGPoint(x: cropFrame.minX, y: cropFrame.midY)
         case .right:
-            return CGPoint(x: cropFrame.maxX, y: cropFrame.midY)
+            CGPoint(x: cropFrame.maxX, y: cropFrame.midY)
         }
     }
 
-    private var baseImage: some View {
+    private func baseImage(fittedSize: CGSize) -> some View {
         previewImage
             .resizable()
 #if DEBUG
             .border(.orange, width: 2)
 #endif
             .scaledToFit()
-            .scaleEffect(rotationFitScale(for: fittedSize, angle: edits.rotation))
+            .scaleEffect(LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: edits.rotation))
             .rotationEffect(edits.rotation)
-            .frame(width: geometrySize.width, height: geometrySize.height)
-            .position(x: geometrySize.width / 2, y: geometrySize.height / 2)
+            .frame(width: cropWorkspaceSize.width, height: cropWorkspaceSize.height)
+            .position(x: cropWorkspaceSize.width / 2, y: cropWorkspaceSize.height / 2)
     }
 
-    private var outsideCropEffectImage: some View {
-        baseImage
+    private func outsideCropEffectImage(fittedSize: CGSize) -> some View {
+        baseImage(fittedSize: fittedSize)
             .saturation(max(0, 1 - desaturateAmount))
             .blur(radius: blurRadius)
     }
 
-    // MARK: - Effect Helpers
+    private func beginCropGesture(from cropFrame: CGRect) {
+        if cropGestureStartFrame == nil {
+            cropGestureStartFrame = cropFrame
+        }
+    }
+
+    private func effectiveCropFrame(visibleImageSize: CGSize) -> CGRect {
+        if let draftCropFrame, draftCropFrame.width > 1, draftCropFrame.height > 1 {
+            return draftCropFrame
+        }
+
+        if let crop = edits.crop?.standardized,
+           crop.width > minimumStoredCropDimension,
+           crop.height > minimumStoredCropDimension {
+            return LosslessEditGeometry.croppedFrame(
+                from: crop,
+                in: cropWorkspaceSize,
+                visibleImageSize: visibleImageSize
+            )
+        }
+
+        return LosslessEditGeometry.uncroppedFrame(
+            in: cropWorkspaceSize,
+            visibleImageSize: visibleImageSize,
+            rotation: edits.rotation
+        )
+    }
+
+    private func updateCropFrame(
+        for constraint: CropConstraint,
+        from cropFrame: CGRect,
+        visibleImageSize: CGSize
+    ) {
+        guard let ratio = constraint.ratio else {
+            commitConstrainedCropFrame(cropFrame, moving: .all, visibleImageSize: visibleImageSize)
+            return
+        }
+
+        let adjusted = CropFrameMutation.aspectRatioAdjustedCropFrame(cropFrame, ratio: ratio)
+        commitConstrainedCropFrame(adjusted, moving: .all, visibleImageSize: visibleImageSize)
+    }
+
+    private func commitConstrainedCropFrame(
+        _ cropFrame: CGRect,
+        moving: CropFrameMutation.MovingEdges,
+        visibleImageSize: CGSize
+    ) {
+        let constrained = CropFrameMutation.constrainedCropFrame(
+            cropFrame,
+            moving: moving,
+            within: cropWorkspaceRect,
+            visibleImageSize: visibleImageSize,
+            rotation: edits.rotation,
+            cropConstraint: cropConstraint
+        )
+        commitCropFrame(constrained, visibleImageSize: visibleImageSize)
+    }
+
+    private func commitCropFrame(_ cropFrame: CGRect, visibleImageSize: CGSize) {
+        let clamped = CropFrameMutation.clamped(cropFrame: cropFrame.standardized, to: cropWorkspaceRect)
+        draftCropFrame = clamped
+        edits.crop = LosslessEditGeometry.normalizedCrop(
+            from: clamped,
+            in: cropWorkspaceSize,
+            visibleImageSize: visibleImageSize
+        )
+    }
+
+    private func updateCropFrame(
+        byTranslatingFrom cropFrame: CGRect,
+        translation: CGSize,
+        visibleImageSize: CGSize
+    ) {
+        let updated = CropFrameMutation.translatedCropFrame(cropFrame, by: translation)
+        commitConstrainedCropFrame(updated, moving: .all, visibleImageSize: visibleImageSize)
+    }
+
+    private func updateCropFrame(
+        byResizing handle: CropCornerHandle,
+        from cropFrame: CGRect,
+        translation: CGSize,
+        visibleImageSize: CGSize
+    ) {
+        let updated = CropFrameMutation.resizedCropFrame(
+            cropFrame,
+            byResizing: handle,
+            translation: translation,
+            minimumNormalizedCropSize: minimumNormalizedCropSize,
+            visibleImageSize: visibleImageSize,
+            cropConstraint: cropConstraint
+        )
+        commitConstrainedCropFrame(updated, moving: .corner(handle), visibleImageSize: visibleImageSize)
+    }
+
+    private func updateCropFrame(
+        byResizing handle: CropEdgeHandle,
+        from cropFrame: CGRect,
+        translation: CGSize,
+        visibleImageSize: CGSize
+    ) {
+        let updated = CropFrameMutation.resizedCropFrame(
+            cropFrame,
+            byResizing: handle,
+            translation: translation,
+            minimumNormalizedCropSize: minimumNormalizedCropSize,
+            visibleImageSize: visibleImageSize,
+            cropConstraint: cropConstraint
+        )
+        commitConstrainedCropFrame(updated, moving: .edge(handle), visibleImageSize: visibleImageSize)
+    }
+
     private var blurRadius: CGFloat {
         for effect in croppingEffects {
             if case let .blur(radius) = effect { return max(0, CGFloat(radius)) }
@@ -236,10 +420,754 @@ struct CroppingView: View {
 
     private var previewImage: Image {
         if let sourceUIImage,
-           let adjustedImage = sourceUIImage.applyingColorAdjustments(using: edits, targetSize: geometrySize) {
+           let adjustedImage = sourceUIImage.applyingColorAdjustments(using: edits, targetSize: cropWorkspaceSize) {
             return Image(uiImage: adjustedImage)
         }
 
         return image
     }
+}
+
+private enum CropFrameMutation {
+    enum MovingEdges {
+        case all
+        case corner(CropCornerHandle)
+        case edge(CropEdgeHandle)
+
+        var affectedEdges: [CropEdgeHandle] {
+            switch self {
+            case .all:
+                [.top, .bottom, .left, .right]
+            case let .corner(handle):
+                switch handle {
+                case .topLeft:
+                    [.top, .left]
+                case .topRight:
+                    [.top, .right]
+                case .bottomLeft:
+                    [.bottom, .left]
+                case .bottomRight:
+                    [.bottom, .right]
+                }
+            case let .edge(handle):
+                [handle]
+            }
+        }
+    }
+
+    static func translatedCropFrame(_ cropFrame: CGRect, by translation: CGSize) -> CGRect {
+        cropFrame.offsetBy(dx: translation.width, dy: translation.height)
+    }
+
+    static func aspectRatioAdjustedCropFrame(_ cropFrame: CGRect, ratio: CGFloat) -> CGRect {
+        guard cropFrame.width > 0, cropFrame.height > 0, ratio > 0 else { return cropFrame }
+
+        let currentRatio = cropFrame.width / cropFrame.height
+        let center = CGPoint(x: cropFrame.midX, y: cropFrame.midY)
+
+        let size: CGSize
+        if currentRatio > ratio {
+            size = CGSize(width: cropFrame.height * ratio, height: cropFrame.height)
+        } else {
+            size = CGSize(width: cropFrame.width, height: cropFrame.width / ratio)
+        }
+
+        return CGRect(
+            x: center.x - (size.width / 2),
+            y: center.y - (size.height / 2),
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    static func resizedCropFrame(
+        _ cropFrame: CGRect,
+        byResizing handle: CropCornerHandle,
+        translation: CGSize,
+        minimumNormalizedCropSize: CGFloat,
+        visibleImageSize: CGSize,
+        cropConstraint: CropConstraint
+    ) -> CGRect {
+        guard let ratio = cropConstraint.ratio else {
+            return resizedCropFrameFreeform(
+                cropFrame,
+                byResizing: handle,
+                translation: translation,
+                minimumNormalizedCropSize: minimumNormalizedCropSize,
+                visibleImageSize: visibleImageSize
+            )
+        }
+
+        let minimumSize = minimumAspectLockedSize(
+            minimumNormalizedCropSize: minimumNormalizedCropSize,
+            visibleImageSize: visibleImageSize,
+            ratio: ratio
+        )
+        let scaleX = proposedWidth(for: handle, cropFrame: cropFrame, translation: translation) / max(cropFrame.width, 0.0001)
+        let scaleY = proposedHeight(for: handle, cropFrame: cropFrame, translation: translation) / max(cropFrame.height, 0.0001)
+        let scale = abs(scaleX - 1) > abs(scaleY - 1) ? scaleX : scaleY
+
+        let width = max(minimumSize.width, cropFrame.width * scale)
+        let height = max(minimumSize.height, width / ratio)
+
+        switch handle {
+        case .topLeft:
+            return CGRect(
+                x: cropFrame.maxX - width,
+                y: cropFrame.maxY - height,
+                width: width,
+                height: height
+            )
+        case .topRight:
+            return CGRect(
+                x: cropFrame.minX,
+                y: cropFrame.maxY - height,
+                width: width,
+                height: height
+            )
+        case .bottomLeft:
+            return CGRect(
+                x: cropFrame.maxX - width,
+                y: cropFrame.minY,
+                width: width,
+                height: height
+            )
+        case .bottomRight:
+            return CGRect(
+                x: cropFrame.minX,
+                y: cropFrame.minY,
+                width: width,
+                height: height
+            )
+        }
+    }
+
+    static func resizedCropFrame(
+        _ cropFrame: CGRect,
+        byResizing handle: CropEdgeHandle,
+        translation: CGSize,
+        minimumNormalizedCropSize: CGFloat,
+        visibleImageSize: CGSize,
+        cropConstraint: CropConstraint
+    ) -> CGRect {
+        guard let ratio = cropConstraint.ratio else {
+            return resizedCropFrameFreeform(
+                cropFrame,
+                byResizing: handle,
+                translation: translation,
+                minimumNormalizedCropSize: minimumNormalizedCropSize,
+                visibleImageSize: visibleImageSize
+            )
+        }
+
+        let minimumSize = minimumAspectLockedSize(
+            minimumNormalizedCropSize: minimumNormalizedCropSize,
+            visibleImageSize: visibleImageSize,
+            ratio: ratio
+        )
+        let midX = cropFrame.midX
+        let midY = cropFrame.midY
+
+        switch handle {
+        case .left:
+            let width = max(minimumSize.width, cropFrame.width - translation.width)
+            let height = max(minimumSize.height, width / ratio)
+            return CGRect(
+                x: cropFrame.maxX - width,
+                y: midY - (height / 2),
+                width: width,
+                height: height
+            )
+        case .right:
+            let width = max(minimumSize.width, cropFrame.width + translation.width)
+            let height = max(minimumSize.height, width / ratio)
+            return CGRect(
+                x: cropFrame.minX,
+                y: midY - (height / 2),
+                width: width,
+                height: height
+            )
+        case .top:
+            let height = max(minimumSize.height, cropFrame.height - translation.height)
+            let width = max(minimumSize.width, height * ratio)
+            return CGRect(
+                x: midX - (width / 2),
+                y: cropFrame.maxY - height,
+                width: width,
+                height: height
+            )
+        case .bottom:
+            let height = max(minimumSize.height, cropFrame.height + translation.height)
+            let width = max(minimumSize.width, height * ratio)
+            return CGRect(
+                x: midX - (width / 2),
+                y: cropFrame.minY,
+                width: width,
+                height: height
+            )
+        }
+    }
+
+    private static func resizedCropFrameFreeform(
+        _ cropFrame: CGRect,
+        byResizing handle: CropCornerHandle,
+        translation: CGSize,
+        minimumNormalizedCropSize: CGFloat,
+        visibleImageSize: CGSize
+    ) -> CGRect {
+        var updated = cropFrame
+        let minimumWidth = visibleImageSize.width * minimumNormalizedCropSize
+        let minimumHeight = visibleImageSize.height * minimumNormalizedCropSize
+
+        switch handle {
+        case .topLeft:
+            updated.origin.x += translation.width
+            updated.origin.y += translation.height
+            updated.size.width -= translation.width
+            updated.size.height -= translation.height
+        case .topRight:
+            updated.origin.y += translation.height
+            updated.size.width += translation.width
+            updated.size.height -= translation.height
+        case .bottomLeft:
+            updated.origin.x += translation.width
+            updated.size.width -= translation.width
+            updated.size.height += translation.height
+        case .bottomRight:
+            updated.size.width += translation.width
+            updated.size.height += translation.height
+        }
+
+        if updated.width < minimumWidth {
+            switch handle {
+            case .topLeft, .bottomLeft:
+                updated.origin.x = cropFrame.maxX - minimumWidth
+            case .topRight, .bottomRight:
+                break
+            }
+            updated.size.width = minimumWidth
+        }
+
+        if updated.height < minimumHeight {
+            switch handle {
+            case .topLeft, .topRight:
+                updated.origin.y = cropFrame.maxY - minimumHeight
+            case .bottomLeft, .bottomRight:
+                break
+            }
+            updated.size.height = minimumHeight
+        }
+
+        return updated
+    }
+
+    private static func resizedCropFrameFreeform(
+        _ cropFrame: CGRect,
+        byResizing handle: CropEdgeHandle,
+        translation: CGSize,
+        minimumNormalizedCropSize: CGFloat,
+        visibleImageSize: CGSize
+    ) -> CGRect {
+        var updated = cropFrame
+        let minimumWidth = visibleImageSize.width * minimumNormalizedCropSize
+        let minimumHeight = visibleImageSize.height * minimumNormalizedCropSize
+
+        switch handle {
+        case .left:
+            updated.origin.x += translation.width
+            updated.size.width -= translation.width
+        case .right:
+            updated.size.width += translation.width
+        case .top:
+            updated.origin.y += translation.height
+            updated.size.height -= translation.height
+        case .bottom:
+            updated.size.height += translation.height
+        }
+
+        if updated.width < minimumWidth {
+            switch handle {
+            case .left:
+                updated.origin.x = cropFrame.maxX - minimumWidth
+            case .right, .top, .bottom:
+                break
+            }
+            updated.size.width = minimumWidth
+        }
+
+        if updated.height < minimumHeight {
+            switch handle {
+            case .top:
+                updated.origin.y = cropFrame.maxY - minimumHeight
+            case .bottom, .left, .right:
+                break
+            }
+            updated.size.height = minimumHeight
+        }
+
+        return updated
+    }
+
+    private static func proposedWidth(for handle: CropCornerHandle, cropFrame: CGRect, translation: CGSize) -> CGFloat {
+        switch handle {
+        case .topLeft, .bottomLeft:
+            cropFrame.width - translation.width
+        case .topRight, .bottomRight:
+            cropFrame.width + translation.width
+        }
+    }
+
+    private static func proposedHeight(for handle: CropCornerHandle, cropFrame: CGRect, translation: CGSize) -> CGFloat {
+        switch handle {
+        case .topLeft, .topRight:
+            cropFrame.height - translation.height
+        case .bottomLeft, .bottomRight:
+            cropFrame.height + translation.height
+        }
+    }
+
+    private static func minimumAspectLockedSize(
+        minimumNormalizedCropSize: CGFloat,
+        visibleImageSize: CGSize,
+        ratio: CGFloat
+    ) -> CGSize {
+        let minimumWidth = visibleImageSize.width * minimumNormalizedCropSize
+        let minimumHeight = visibleImageSize.height * minimumNormalizedCropSize
+        let lockedMinimumWidth = max(minimumWidth, minimumHeight * ratio)
+
+        return CGSize(
+            width: lockedMinimumWidth,
+            height: lockedMinimumWidth / ratio
+        )
+    }
+
+    static func clamped(cropFrame: CGRect, to bounds: CGRect) -> CGRect {
+        var clamped = cropFrame
+
+        if clamped.minX < bounds.minX {
+            clamped.origin.x = bounds.minX
+        }
+        if clamped.minY < bounds.minY {
+            clamped.origin.y = bounds.minY
+        }
+        if clamped.maxX > bounds.maxX {
+            clamped.origin.x = bounds.maxX - clamped.width
+        }
+        if clamped.maxY > bounds.maxY {
+            clamped.origin.y = bounds.maxY - clamped.height
+        }
+
+        return clamped
+    }
+
+    static func constrainedCropFrame(
+        _ cropFrame: CGRect,
+        moving: MovingEdges,
+        within bounds: CGRect,
+        visibleImageSize: CGSize,
+        rotation: Angle,
+        cropConstraint: CropConstraint
+    ) -> CGRect {
+        let boundary = RotatedImageBoundary(
+            in: bounds,
+            visibleImageSize: visibleImageSize,
+            rotation: rotation
+        )
+
+        switch moving {
+        case .all:
+            var constrained = clamped(cropFrame: cropFrame.standardized, to: bounds)
+            constrained = clampTranslatedCropFrame(constrained, within: boundary)
+            return clamped(cropFrame: constrained, to: bounds)
+        case .corner, .edge:
+            var constrained = cropFrame.standardized
+            if let ratio = cropConstraint.ratio {
+                constrained = clampAspectLockedCropFrame(
+                    constrained,
+                    moving: moving,
+                    within: boundary,
+                    ratio: ratio
+                )
+            } else {
+                for edge in moving.affectedEdges {
+                    switch edge {
+                    case .top:
+                        constrained = clampTopEdge(of: constrained, within: boundary)
+                    case .bottom:
+                        constrained = clampBottomEdge(of: constrained, within: boundary)
+                    case .left:
+                        constrained = clampLeftEdge(of: constrained, within: boundary)
+                    case .right:
+                        constrained = clampRightEdge(of: constrained, within: boundary)
+                    }
+                }
+            }
+            return constrained
+        }
+    }
+
+    private static func clampTranslatedCropFrame(
+        _ cropFrame: CGRect,
+        within boundary: RotatedImageBoundary
+    ) -> CGRect {
+        var constrained = cropFrame
+
+        for _ in 0..<4 {
+            if !edgeIsValid(.left, in: constrained, within: boundary) {
+                constrained.origin.x = boundary.leftLimit(forYValues: [constrained.minY, constrained.maxY])
+            }
+            if !edgeIsValid(.right, in: constrained, within: boundary) {
+                constrained.origin.x = boundary.rightLimit(forYValues: [constrained.minY, constrained.maxY]) - constrained.width
+            }
+            if !edgeIsValid(.top, in: constrained, within: boundary) {
+                constrained.origin.y = boundary.topLimit(forXValues: [constrained.minX, constrained.maxX])
+            }
+            if !edgeIsValid(.bottom, in: constrained, within: boundary) {
+                constrained.origin.y = boundary.bottomLimit(forXValues: [constrained.minX, constrained.maxX]) - constrained.height
+            }
+        }
+
+        return constrained
+    }
+
+    private static func clampAspectLockedCropFrame(
+        _ cropFrame: CGRect,
+        moving: MovingEdges,
+        within boundary: RotatedImageBoundary,
+        ratio: CGFloat
+    ) -> CGRect {
+        switch moving {
+        case let .corner(handle):
+            clampAspectLockedCornerCropFrame(cropFrame, handle: handle, within: boundary, ratio: ratio)
+        case let .edge(handle):
+            clampAspectLockedEdgeCropFrame(cropFrame, handle: handle, within: boundary, ratio: ratio)
+        case .all:
+            clampTranslatedCropFrame(cropFrame, within: boundary)
+        }
+    }
+
+    private static func clampAspectLockedCornerCropFrame(
+        _ cropFrame: CGRect,
+        handle: CropCornerHandle,
+        within boundary: RotatedImageBoundary,
+        ratio: CGFloat
+    ) -> CGRect {
+        let proposedWidth = cropFrame.width
+
+        return binarySearchValidFrame(
+            initialWidthOrHeight: proposedWidth,
+            minimumValue: 1,
+            moving: .corner(handle)
+        ) { value in
+            let height = value / ratio
+
+            switch handle {
+            case .topLeft:
+                let anchor = CGPoint(x: cropFrame.maxX, y: cropFrame.maxY)
+                return CGRect(x: anchor.x - value, y: anchor.y - height, width: value, height: height)
+            case .topRight:
+                let anchor = CGPoint(x: cropFrame.minX, y: cropFrame.maxY)
+                return CGRect(x: anchor.x, y: anchor.y - height, width: value, height: height)
+            case .bottomLeft:
+                let anchor = CGPoint(x: cropFrame.maxX, y: cropFrame.minY)
+                return CGRect(x: anchor.x - value, y: anchor.y, width: value, height: height)
+            case .bottomRight:
+                let anchor = CGPoint(x: cropFrame.minX, y: cropFrame.minY)
+                return CGRect(x: anchor.x, y: anchor.y, width: value, height: height)
+            }
+        } validator: { candidate in
+            edgesAreValid(candidate, for: .corner(handle), within: boundary)
+        }
+    }
+
+    private static func clampAspectLockedEdgeCropFrame(
+        _ cropFrame: CGRect,
+        handle: CropEdgeHandle,
+        within boundary: RotatedImageBoundary,
+        ratio: CGFloat
+    ) -> CGRect {
+        let center = CGPoint(x: cropFrame.midX, y: cropFrame.midY)
+
+        switch handle {
+        case .top:
+            return binarySearchValidFrame(
+                initialWidthOrHeight: cropFrame.height,
+                minimumValue: 1,
+                moving: .edge(handle)
+            ) { value in
+                let width = value * ratio
+                return CGRect(
+                    x: center.x - width / 2,
+                    y: cropFrame.maxY - value,
+                    width: width,
+                    height: value
+                )
+            } validator: { candidate in
+                edgesAreValid(candidate, for: .edge(handle), within: boundary)
+            }
+        case .bottom:
+            return binarySearchValidFrame(
+                initialWidthOrHeight: cropFrame.height,
+                minimumValue: 1,
+                moving: .edge(handle)
+            ) { value in
+                let width = value * ratio
+                return CGRect(
+                    x: center.x - width / 2,
+                    y: cropFrame.minY,
+                    width: width,
+                    height: value
+                )
+            } validator: { candidate in
+                edgesAreValid(candidate, for: .edge(handle), within: boundary)
+            }
+        case .left:
+            return binarySearchValidFrame(
+                initialWidthOrHeight: cropFrame.width,
+                minimumValue: 1,
+                moving: .edge(handle)
+            ) { value in
+                let height = value / ratio
+                return CGRect(
+                    x: cropFrame.maxX - value,
+                    y: center.y - height / 2,
+                    width: value,
+                    height: height
+                )
+            } validator: { candidate in
+                edgesAreValid(candidate, for: .edge(handle), within: boundary)
+            }
+        case .right:
+            return binarySearchValidFrame(
+                initialWidthOrHeight: cropFrame.width,
+                minimumValue: 1,
+                moving: .edge(handle)
+            ) { value in
+                let height = value / ratio
+                return CGRect(
+                    x: cropFrame.minX,
+                    y: center.y - height / 2,
+                    width: value,
+                    height: height
+                )
+            } validator: { candidate in
+                edgesAreValid(candidate, for: .edge(handle), within: boundary)
+            }
+        }
+    }
+
+    private static func clampTopEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
+        let maxY = cropFrame.maxY
+        let minY = max(cropFrame.minY, boundary.topLimit(forXValues: [cropFrame.minX, cropFrame.maxX]))
+        return CGRect(x: cropFrame.minX, y: minY, width: cropFrame.width, height: maxY - minY)
+    }
+
+    private static func clampBottomEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
+        let maxY = min(cropFrame.maxY, boundary.bottomLimit(forXValues: [cropFrame.minX, cropFrame.maxX]))
+        return CGRect(x: cropFrame.minX, y: cropFrame.minY, width: cropFrame.width, height: maxY - cropFrame.minY)
+    }
+
+    private static func clampLeftEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
+        let maxX = cropFrame.maxX
+        let minX = max(cropFrame.minX, boundary.leftLimit(forYValues: [cropFrame.minY, cropFrame.maxY]))
+        return CGRect(x: minX, y: cropFrame.minY, width: maxX - minX, height: cropFrame.height)
+    }
+
+    private static func clampRightEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
+        let maxX = min(cropFrame.maxX, boundary.rightLimit(forYValues: [cropFrame.minY, cropFrame.maxY]))
+        return CGRect(x: cropFrame.minX, y: cropFrame.minY, width: maxX - cropFrame.minX, height: cropFrame.height)
+    }
+
+    private static func binarySearchValidFrame(
+        initialWidthOrHeight: CGFloat,
+        minimumValue: CGFloat,
+        moving: MovingEdges,
+        builder: (CGFloat) -> CGRect,
+        validator: (CGRect) -> Bool
+    ) -> CGRect {
+        var low = minimumValue
+        var high = initialWidthOrHeight
+        var best = builder(minimumValue)
+
+        if validator(builder(high)) {
+            return builder(high)
+        }
+
+        for _ in 0..<24 {
+            let mid = (low + high) / 2
+            let candidate = builder(mid)
+            if validator(candidate) {
+                best = candidate
+                low = mid
+            } else {
+                high = mid
+            }
+        }
+
+        return best
+    }
+
+    private static func edgesAreValid(
+        _ cropFrame: CGRect,
+        for moving: MovingEdges,
+        within boundary: RotatedImageBoundary
+    ) -> Bool {
+        moving.affectedEdges.allSatisfy { edgeIsValid($0, in: cropFrame, within: boundary) }
+    }
+
+    private static func edgeIsValid(
+        _ edge: CropEdgeHandle,
+        in cropFrame: CGRect,
+        within boundary: RotatedImageBoundary
+    ) -> Bool {
+        switch edge {
+        case .top:
+            return boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.minY))
+                || boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.minY))
+        case .bottom:
+            return boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.maxY))
+                || boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.maxY))
+        case .left:
+            return boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.minY))
+                || boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.maxY))
+        case .right:
+            return boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.minY))
+                || boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.maxY))
+        }
+    }
+}
+
+private struct RotatedImageBoundary {
+    let corners: [CGPoint]
+    let minX: CGFloat
+    let maxX: CGFloat
+    let minY: CGFloat
+    let maxY: CGFloat
+
+    init(
+        in bounds: CGRect,
+        visibleImageSize: CGSize,
+        rotation: Angle
+    ) {
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let halfWidth = visibleImageSize.width / 2
+        let halfHeight = visibleImageSize.height / 2
+        let cosine = cos(rotation.radians)
+        let sine = sin(rotation.radians)
+
+        corners = [
+            CGPoint(x: -halfWidth, y: -halfHeight),
+            CGPoint(x: halfWidth, y: -halfHeight),
+            CGPoint(x: halfWidth, y: halfHeight),
+            CGPoint(x: -halfWidth, y: halfHeight)
+        ].map { point in
+            CGPoint(
+                x: center.x + (point.x * cosine) - (point.y * sine),
+                y: center.y + (point.x * sine) + (point.y * cosine)
+            )
+        }
+
+        minX = corners.map(\.x).min() ?? bounds.minX
+        maxX = corners.map(\.x).max() ?? bounds.maxX
+        minY = corners.map(\.y).min() ?? bounds.minY
+        maxY = corners.map(\.y).max() ?? bounds.maxY
+    }
+
+    func contains(_ point: CGPoint, epsilon: CGFloat = 0.5) -> Bool {
+        guard let range = verticalRange(atX: point.x) else { return false }
+        return point.y >= range.lowerBound - epsilon && point.y <= range.upperBound + epsilon
+    }
+
+    func topLimit(forXValues xValues: [CGFloat]) -> CGFloat {
+        sampledVerticalBounds(atXValues: xValues).map(\.lowerBound).min() ?? minY
+    }
+
+    func bottomLimit(forXValues xValues: [CGFloat]) -> CGFloat {
+        sampledVerticalBounds(atXValues: xValues).map(\.upperBound).max() ?? maxY
+    }
+
+    func leftLimit(forYValues yValues: [CGFloat]) -> CGFloat {
+        sampledHorizontalBounds(atYValues: yValues).map(\.lowerBound).min() ?? minX
+    }
+
+    func rightLimit(forYValues yValues: [CGFloat]) -> CGFloat {
+        sampledHorizontalBounds(atYValues: yValues).map(\.upperBound).max() ?? maxX
+    }
+
+    private func sampledVerticalBounds(atXValues xValues: [CGFloat]) -> [ClosedRange<CGFloat>] {
+        xValues.compactMap { verticalRange(atX: $0) }
+    }
+
+    private func sampledHorizontalBounds(atYValues yValues: [CGFloat]) -> [ClosedRange<CGFloat>] {
+        yValues.compactMap { horizontalRange(atY: $0) }
+    }
+
+    private func verticalRange(atX x: CGFloat) -> ClosedRange<CGFloat>? {
+        lineIntersections(
+            with: { p0, p1 in
+                intersectVerticalLine(x: x, from: p0, to: p1)
+            }
+        )
+    }
+
+    private func horizontalRange(atY y: CGFloat) -> ClosedRange<CGFloat>? {
+        lineIntersections(
+            with: { p0, p1 in
+                intersectHorizontalLine(y: y, from: p0, to: p1)
+            }
+        )
+    }
+
+    private func lineIntersections(with intersection: (CGPoint, CGPoint) -> CGFloat?) -> ClosedRange<CGFloat>? {
+        var values: [CGFloat] = []
+
+        for index in corners.indices {
+            let nextIndex = (index + 1) % corners.count
+            if let value = intersection(corners[index], corners[nextIndex]) {
+                if !values.contains(where: { abs($0 - value) < 0.5 }) {
+                    values.append(value)
+                }
+            }
+        }
+
+        guard let minimum = values.min(), let maximum = values.max() else { return nil }
+        return minimum...maximum
+    }
+
+    private func intersectVerticalLine(x: CGFloat, from start: CGPoint, to end: CGPoint) -> CGFloat? {
+        let deltaX = end.x - start.x
+        if abs(deltaX) < 0.0001 {
+            guard abs(x - start.x) < 0.5 else { return nil }
+            return min(start.y, end.y)
+        }
+
+        let t = (x - start.x) / deltaX
+        guard (0...1).contains(t) else { return nil }
+        return start.y + (end.y - start.y) * t
+    }
+
+    private func intersectHorizontalLine(y: CGFloat, from start: CGPoint, to end: CGPoint) -> CGFloat? {
+        let deltaY = end.y - start.y
+        if abs(deltaY) < 0.0001 {
+            guard abs(y - start.y) < 0.5 else { return nil }
+            return min(start.x, end.x)
+        }
+
+        let t = (y - start.y) / deltaY
+        guard (0...1).contains(t) else { return nil }
+        return start.x + (end.x - start.x) * t
+    }
+}
+
+#Preview {
+    CroppingView(
+        image: Image(systemName: "photo"),
+        sourceUIImage: nil,
+        imageSize: CGSize(width: 1200, height: 800),
+        geometrySize: CGSize(width: 390, height: 640),
+        edits: .constant(LosslessEdits(crop: nil, rotation: .degrees(6))),
+        cropConstraint: .constant(.freeform),
+        croppingEffects: CroppingEffectSet([.dim(opacity: 0.4)])
+    )
+    .background(Color.black)
 }
