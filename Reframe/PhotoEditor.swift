@@ -9,6 +9,8 @@ import SwiftUI
 import os
 
 public struct PhotoEditor: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     static let checkmark = "checkmark.circle.fill"
     static let xmark = "xmark.circle.fill"
 
@@ -27,37 +29,26 @@ public struct PhotoEditor: View {
     let onConfirm: (() -> Void)?
 
     @State private var draftEdits: LosslessEdits
-    @State private var tool: ToolMode = .adjust
+    @State private var selectedAdjustment: PhotoEditConfiguration.Adjustment = .tilt
+    @State private var selectedSection: AdjustmentSection = .tone
 
     let photoEditConfiguration: PhotoEditConfiguration
-
-    private enum ToolMode: String, CaseIterable, Identifiable {
-        case crop
-        case adjust
-
-        var id: String { rawValue }
-    }
 
     private var cropIsAllowed: Bool {
         photoEditConfiguration.allowedAdjustments.contains(.crop)
     }
 
     private var hasAvailableAdjustments: Bool {
-        !photoEditConfiguration.allowedAdjustments.subtracting([.crop]).isEmpty
+        !photoEditConfiguration.allowedAdjustments.isEmpty
     }
 
-    private var availableTools: [ToolMode] {
-        var tools: [ToolMode] = []
+    private var showsCroppingMode: Bool {
+        selectedAdjustment == .crop && cropIsAllowed
+    }
 
-        if cropIsAllowed {
-            tools.append(.crop)
-        }
-
-        if hasAvailableAdjustments {
-            tools.append(.adjust)
-        }
-
-        return tools
+    private var geometryCanvasBottomInset: CGFloat {
+        guard selectedSection == .geometry, hasAvailableAdjustments else { return 0 }
+        return horizontalSizeClass == .compact ? 148 : 212
     }
 
     public init(
@@ -75,7 +66,9 @@ public struct PhotoEditor: View {
         self.onCancel = onCancel
         self.onConfirm = onConfirm
         _draftEdits = State(initialValue: edits.wrappedValue)
-        _tool = State(initialValue: photoEditConfiguration.allowedAdjustments.contains(.crop) ? .crop : .adjust)
+        let initialAdjustment = PhotoEditConfiguration.Adjustment.allCases.first(where: photoEditConfiguration.allowedAdjustments.contains) ?? .tilt
+        _selectedAdjustment = State(initialValue: initialAdjustment)
+        _selectedSection = State(initialValue: initialAdjustment.section)
     }
 
     public var body: some View {
@@ -83,14 +76,14 @@ public struct PhotoEditor: View {
             topBar
                 .zIndex(1)
 
-            editorImage
+            editorContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .zIndex(0)
         }
         .background(Color.black)
         .onChange(of: edits) { _, newValue in
             Self.log("edits -> \(edits)")
             draftEdits = newValue
+            sanitizeSelection()
         }
         .environment(\.colorScheme, .dark)
     }
@@ -105,18 +98,6 @@ private extension PhotoEditor {
 
             Spacer()
 
-            if availableTools.count > 1 {
-                Picker("Tool", selection: $tool) {
-                    ForEach(availableTools) { tool in
-                        Text(tool.rawValue.capitalized).tag(tool)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 280)
-            }
-
-            Spacer()
-
             acceptButton
         }
         .padding(.horizontal)
@@ -125,52 +106,120 @@ private extension PhotoEditor {
         .background(.ultraThinMaterial)
     }
 
-    var editorImage: some View {
+    var editorContent: some View {
         GeometryReader { geometry in
-            let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: geometry.size)
+            let canvasSize = CGSize(
+                width: geometry.size.width,
+                height: max(0, geometry.size.height - geometryCanvasBottomInset)
+            )
+            let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: canvasSize)
             let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: draftEdits.rotation)
-            let currentCropFrame = committedCropFrame(in: geometry.size, visibleImageSize: visibleImageSize)
+            let currentCropFrame = committedCropFrame(in: canvasSize, visibleImageSize: visibleImageSize)
 
             ZStack {
-                if tool == .crop, cropIsAllowed {
-                    CroppingView(
-                        image: image,
-                        sourceUIImage: sourceUIImage,
-                        imageSize: imageSize,
-                        geometrySize: geometry.size,
-                        edits: $draftEdits,
-                        cropConstraint: $draftEdits.cropConstraint,
-                        croppingEffects: photoEditConfiguration.croppingEffects
-                    )
-                } else if hasAvailableAdjustments {
-                    AdjustView(
-                        image: image,
-                        sourceUIImage: sourceUIImage,
-                        imageSize: imageSize,
-                        geometrySize: geometry.size,
-                        edits: $draftEdits,
-                        cropFrame: currentCropFrame,
-                        allowedAdjustments: photoEditConfiguration.allowedAdjustments
-                    )
-                } else {
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .padding()
+                ZStack(alignment: .bottom) {
+                    Group {
+                        if showsCroppingMode {
+                            CroppingView(
+                                image: image,
+                                sourceUIImage: sourceUIImage,
+                                imageSize: imageSize,
+                                geometrySize: canvasSize,
+                                edits: $draftEdits,
+                                cropConstraint: $draftEdits.cropConstraint,
+                                photoEditConfiguration: photoEditConfiguration,
+                                showsControlsBar: false
+                            )
+                        } else if hasAvailableAdjustments {
+                            adjustCanvas(
+                                geometrySize: canvasSize,
+                                cropFrame: currentCropFrame
+                            )
+                        } else {
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        }
+                    }
+                    .frame(width: canvasSize.width, height: canvasSize.height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .animation(.snappy(duration: 0.25), value: selectedSection)
+                    .animation(.snappy(duration: 0.25), value: selectedAdjustment)
+
+                    if hasAvailableAdjustments {
+                        ControlsView(
+                            edits: $draftEdits,
+                            cropConstraint: $draftEdits.cropConstraint,
+                            photoEditConfiguration: photoEditConfiguration,
+                            selectedAdjustment: $selectedAdjustment,
+                            selectedSection: $selectedSection,
+                            onSelectCropConstraint: { constraint in
+                                applyCropConstraint(
+                                    constraint,
+                                    from: currentCropFrame,
+                                    geometrySize: canvasSize,
+                                    visibleImageSize: visibleImageSize
+                                )
+                            }
+                        )
+                        .zIndex(1)
+                    }
                 }
             }
-            .onChange(of: tool) { _, newValue in
-                Self.log("tool -> \(newValue)")
+            .onChange(of: selectedAdjustment) { _, newValue in
+                Self.log("adjustment -> \(newValue.rawValue)")
+                if newValue.section != selectedSection {
+                    selectedSection = newValue.section
+                }
+            }
+            .onChange(of: selectedSection) { _, newValue in
+                Self.log("section -> \(newValue.rawValue)")
             }
             .onAppear {
-                if !availableTools.contains(tool), let firstTool = availableTools.first {
-                    tool = firstTool
-                }
+                sanitizeSelection()
             }
         }
-#if DEBUG
-        .border(.yellow, width: 1)
-#endif
+        .border(.yellow, width: photoEditConfiguration.showFrames ? 1 : 0)
+    }
+
+    @ViewBuilder
+    func adjustCanvas(geometrySize: CGSize, cropFrame: CGRect) -> some View {
+        let fittedSize = aspectFitSize(for: imageSize, in: geometrySize)
+        let baseScale = rotationFitScale(for: fittedSize, angle: draftEdits.rotation)
+        let cropCenterOffset = CGSize(
+            width: cropFrame.midX - (geometrySize.width / 2),
+            height: cropFrame.midY - (geometrySize.height / 2)
+        )
+        let cropScaleX = cropFrame.width > 0 ? geometrySize.width / cropFrame.width : 1
+        let cropScaleY = cropFrame.height > 0 ? geometrySize.height / cropFrame.height : 1
+        let cropScale = min(cropScaleX, cropScaleY)
+        let displayedCropSize = CGSize(
+            width: cropFrame.width * cropScale,
+            height: cropFrame.height * cropScale
+        )
+
+        ZStack {
+            Color.black
+
+            adjustPreviewImage(targetSize: geometrySize)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(baseScale * cropScale)
+                .rotationEffect(draftEdits.rotation)
+                .offset(
+                    x: -cropCenterOffset.width * cropScale,
+                    y: -cropCenterOffset.height * cropScale
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .mask {
+                    Rectangle()
+                        .frame(width: displayedCropSize.width, height: displayedCropSize.height)
+                        .position(x: geometrySize.width / 2, y: geometrySize.height / 2)
+                }
+        }
+        .frame(width: geometrySize.width, height: geometrySize.height)
+        .clipped()
     }
 
 }
@@ -178,6 +227,69 @@ private extension PhotoEditor {
 // MARK: - Crop State
 
 private extension PhotoEditor {
+    func aspectFitSize(for imageSize: CGSize, in containerSize: CGSize) -> CGSize {
+        guard
+            imageSize.width > 0,
+            imageSize.height > 0,
+            containerSize.width > 0,
+            containerSize.height > 0
+        else {
+            return .zero
+        }
+
+        let widthScale = containerSize.width / imageSize.width
+        let heightScale = containerSize.height / imageSize.height
+        let scale = min(widthScale, heightScale)
+
+        return CGSize(
+            width: imageSize.width * scale,
+            height: imageSize.height * scale
+        )
+    }
+
+    func rotationFitScale(for size: CGSize, angle: Angle) -> CGFloat {
+        guard size.width > 0, size.height > 0 else { return 1 }
+
+        let rotatedSize = rotatedBoundingSize(for: size, angle: angle)
+        guard rotatedSize.width > 0, rotatedSize.height > 0 else { return 1 }
+
+        let horizontalScale = size.width / rotatedSize.width
+        let verticalScale = size.height / rotatedSize.height
+
+        return min(horizontalScale, verticalScale, 1)
+    }
+
+    func rotatedBoundingSize(for size: CGSize, angle: Angle) -> CGSize {
+        let radians = angle.radians
+        let absoluteCosine = abs(cos(radians))
+        let absoluteSine = abs(sin(radians))
+
+        return CGSize(
+            width: size.width * absoluteCosine + size.height * absoluteSine,
+            height: size.width * absoluteSine + size.height * absoluteCosine
+        )
+    }
+
+    func adjustPreviewImage(targetSize: CGSize) -> Image {
+        if let sourceUIImage,
+           let adjustedImage = sourceUIImage.applyingColorAdjustments(using: draftEdits, targetSize: targetSize) {
+            return Image(uiImage: adjustedImage)
+        }
+
+        return image
+    }
+
+    func sanitizeSelection() {
+        if !photoEditConfiguration.allowedAdjustments.contains(selectedAdjustment),
+           let firstAdjustment = PhotoEditConfiguration.Adjustment.allCases.first(where: photoEditConfiguration.allowedAdjustments.contains) {
+            selectedAdjustment = firstAdjustment
+        }
+
+        if selectedAdjustment.section != selectedSection {
+            selectedSection = selectedAdjustment.section
+        }
+    }
+
     func committedCropFrame(in geometrySize: CGSize, visibleImageSize: CGSize) -> CGRect {
         if let crop = draftEdits.crop?.standardized,
            crop.width > minimumStoredCropDimension,
@@ -191,6 +303,37 @@ private extension PhotoEditor {
             rotation: draftEdits.rotation
         )
     }
+
+    func applyCropConstraint(
+        _ constraint: CropConstraint,
+        from cropFrame: CGRect,
+        geometrySize: CGSize,
+        visibleImageSize: CGSize
+    ) {
+        draftEdits.cropConstraint = constraint
+
+        let updatedCropFrame: CGRect
+        if let ratio = constraint.ratio {
+            updatedCropFrame = CropFrameMutation.aspectRatioAdjustedCropFrame(cropFrame, ratio: ratio)
+        } else {
+            updatedCropFrame = cropFrame
+        }
+
+        let constrained = CropFrameMutation.constrainedCropFrame(
+            updatedCropFrame,
+            moving: .all,
+            within: CGRect(origin: .zero, size: geometrySize),
+            visibleImageSize: visibleImageSize,
+            rotation: draftEdits.rotation,
+            cropConstraint: constraint
+        )
+
+        draftEdits.crop = LosslessEditGeometry.normalizedCrop(
+            from: CropFrameMutation.clamped(cropFrame: constrained.standardized, to: CGRect(origin: .zero, size: geometrySize)),
+            in: geometrySize,
+            visibleImageSize: visibleImageSize
+        )
+    }
 }
 
 // MARK: - Buttons
@@ -200,7 +343,7 @@ private extension PhotoEditor {
         CircularSymbolButton(systemName: Self.xmark) {
             Self.log("tapped cancel")
             draftEdits = edits
-            tool = availableTools.first ?? .adjust
+            sanitizeSelection()
             onCancel?()
         }
         .accessibilityLabel("Cancel")
@@ -210,7 +353,7 @@ private extension PhotoEditor {
         CircularSymbolButton(systemName: Self.checkmark) {
             Self.log("tapped accept")
             edits = draftEdits
-            tool = availableTools.first ?? .adjust
+            sanitizeSelection()
             onConfirm?()
         }
         .accessibilityLabel("OK")

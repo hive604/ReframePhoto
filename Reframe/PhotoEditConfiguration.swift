@@ -23,6 +23,7 @@ public struct PhotoEditConfiguration {
 
     public var croppingEffects: CroppingEffectSet
     public var allowedAdjustments: Set<Adjustment>
+    public var showFrames = false
 
     public init(
         croppingEffects: CroppingEffectSet = CroppingEffectSet([.dim(opacity: 0.4)]),

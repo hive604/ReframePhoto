@@ -19,7 +19,8 @@ struct CroppingView: View {
     let geometrySize: CGSize
     @Binding var edits: LosslessEdits
     @Binding var cropConstraint: CropConstraint
-    let croppingEffects: CroppingEffectSet
+    let photoEditConfiguration: PhotoEditConfiguration
+    var showsControlsBar: Bool = true
 
     @State private var draftCropFrame: CGRect?
     @State private var cropGestureStartFrame: CGRect?
@@ -87,14 +88,21 @@ struct CroppingView: View {
             }
             .frame(width: cropWorkspaceSize.width, height: cropWorkspaceSize.height)
 
-            controlsBar(currentCropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            if showsControlsBar {
+                controlsBar(currentCropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            }
+        }
+        .onChange(of: cropConstraint) { _, _ in
+            // External aspect-ratio changes should defer to the committed crop state.
+            draftCropFrame = nil
+            cropGestureStartFrame = nil
         }
     }
 
     private var cropWorkspaceSize: CGSize {
         CGSize(
             width: geometrySize.width,
-            height: max(0, geometrySize.height - controlsAreaHeight)
+            height: max(0, geometrySize.height - (showsControlsBar ? controlsAreaHeight : 0))
         )
     }
 
@@ -270,9 +278,7 @@ struct CroppingView: View {
     private func baseImage(fittedSize: CGSize) -> some View {
         previewImage
             .resizable()
-#if DEBUG
-            .border(.orange, width: 2)
-#endif
+            .border(.orange, width: photoEditConfiguration.showFrames ? 2 : 0)
             .scaledToFit()
             .scaleEffect(LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: edits.rotation))
             .rotationEffect(edits.rotation)
@@ -398,21 +404,21 @@ struct CroppingView: View {
     }
 
     private var blurRadius: CGFloat {
-        for effect in croppingEffects {
+        for effect in photoEditConfiguration.croppingEffects {
             if case let .blur(radius) = effect { return max(0, CGFloat(radius)) }
         }
         return 0
     }
 
     private var desaturateAmount: Double {
-        for effect in croppingEffects {
+        for effect in photoEditConfiguration.croppingEffects {
             if case let .desaturate(amount) = effect { return max(0, min(1, amount)) }
         }
         return 0
     }
 
     private var dimOpacity: Double {
-        for effect in croppingEffects {
+        for effect in photoEditConfiguration.croppingEffects {
             if case let .dim(opacity) = effect { return max(0, min(1, opacity)) }
         }
         return 0
@@ -428,7 +434,7 @@ struct CroppingView: View {
     }
 }
 
-private enum CropFrameMutation {
+enum CropFrameMutation {
     enum MovingEdges {
         case all
         case corner(CropCornerHandle)
@@ -1023,16 +1029,16 @@ private enum CropFrameMutation {
         switch edge {
         case .top:
             return boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.minY))
-                || boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.minY))
+                && boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.minY))
         case .bottom:
             return boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.maxY))
-                || boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.maxY))
+                && boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.maxY))
         case .left:
             return boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.minY))
-                || boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.maxY))
+                && boundary.contains(CGPoint(x: cropFrame.minX, y: cropFrame.maxY))
         case .right:
             return boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.minY))
-                || boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.maxY))
+                && boundary.contains(CGPoint(x: cropFrame.maxX, y: cropFrame.maxY))
         }
     }
 }
@@ -1074,24 +1080,26 @@ private struct RotatedImageBoundary {
     }
 
     func contains(_ point: CGPoint, epsilon: CGFloat = 0.5) -> Bool {
-        guard let range = verticalRange(atX: point.x) else { return false }
-        return point.y >= range.lowerBound - epsilon && point.y <= range.upperBound + epsilon
+        point.x >= minX - epsilon &&
+        point.x <= maxX + epsilon &&
+        point.y >= minY - epsilon &&
+        point.y <= maxY + epsilon
     }
 
     func topLimit(forXValues xValues: [CGFloat]) -> CGFloat {
-        sampledVerticalBounds(atXValues: xValues).map(\.lowerBound).min() ?? minY
+        minY
     }
 
     func bottomLimit(forXValues xValues: [CGFloat]) -> CGFloat {
-        sampledVerticalBounds(atXValues: xValues).map(\.upperBound).max() ?? maxY
+        maxY
     }
 
     func leftLimit(forYValues yValues: [CGFloat]) -> CGFloat {
-        sampledHorizontalBounds(atYValues: yValues).map(\.lowerBound).min() ?? minX
+        minX
     }
 
     func rightLimit(forYValues yValues: [CGFloat]) -> CGFloat {
-        sampledHorizontalBounds(atYValues: yValues).map(\.upperBound).max() ?? maxX
+        maxX
     }
 
     private func sampledVerticalBounds(atXValues xValues: [CGFloat]) -> [ClosedRange<CGFloat>] {
@@ -1160,6 +1168,9 @@ private struct RotatedImageBoundary {
 }
 
 #Preview {
+    let photoEditConfiguration = PhotoEditConfiguration(
+        croppingEffects: CroppingEffectSet([.dim(opacity: 0.4)])
+    )
     CroppingView(
         image: Image(systemName: "photo"),
         sourceUIImage: nil,
@@ -1167,7 +1178,7 @@ private struct RotatedImageBoundary {
         geometrySize: CGSize(width: 390, height: 640),
         edits: .constant(LosslessEdits(crop: nil, rotation: .degrees(6))),
         cropConstraint: .constant(.freeform),
-        croppingEffects: CroppingEffectSet([.dim(opacity: 0.4)])
+        photoEditConfiguration: photoEditConfiguration
     )
     .background(Color.black)
 }
