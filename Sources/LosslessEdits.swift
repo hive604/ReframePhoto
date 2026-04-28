@@ -9,6 +9,7 @@ import SwiftUI
 import Foundation
 import UIKit
 
+nonisolated
 public struct LosslessEdits: Codable, Hashable {
     /// Image center is 0.0.
     /// Thanks to rotation, this can extend past (-0.5...0.5).
@@ -21,7 +22,13 @@ public struct LosslessEdits: Codable, Hashable {
     public var cropConstraint: CropConstraint
 
     /// Rotation of image.
-    public var rotation: Angle
+    public var rotationDegrees: Double
+
+    /// Rotation of image.
+    var rotation: Angle {
+        get { .degrees(rotationDegrees) }
+        set { rotationDegrees = newValue.degrees }
+    }
 
     /// Brightness adjustment applied by Core Image color controls.
     ///
@@ -79,7 +86,7 @@ public struct LosslessEdits: Codable, Hashable {
     ) {
         self.crop = crop
         self.cropConstraint = cropConstraint
-        self.rotation = rotation
+        self.rotationDegrees = rotation.degrees
         self.brightness = brightness
         self.exposure = exposure
         self.contrast = contrast
@@ -111,7 +118,7 @@ public struct LosslessEdits: Codable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         crop = try container.decodeIfPresent(CGRect.self, forKey: .crop)
         cropConstraint = try container.decodeIfPresent(CropConstraint.self, forKey: .cropConstraint) ?? .freeform
-        rotation = try container.decode(Angle.self, forKey: .rotation)
+        rotationDegrees = try container.decode(Double.self, forKey: .rotation)
         brightness = try container.decodeIfPresent(Double.self, forKey: .brightness) ?? 0.0
         exposure = try container.decodeIfPresent(Double.self, forKey: .exposure) ?? 0.0
         contrast = try container.decodeIfPresent(Double.self, forKey: .contrast) ?? 1.0
@@ -129,7 +136,7 @@ public struct LosslessEdits: Codable, Hashable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(crop, forKey: .crop)
         try container.encode(cropConstraint, forKey: .cropConstraint)
-        try container.encode(rotation, forKey: .rotation)
+        try container.encode(rotationDegrees, forKey: .rotation)
         try container.encode(brightness, forKey: .brightness)
         try container.encode(exposure, forKey: .exposure)
         try container.encode(contrast, forKey: .contrast)
