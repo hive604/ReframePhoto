@@ -10,7 +10,7 @@ import Foundation
 import UIKit
 
 nonisolated
-public struct LosslessEdits: Codable, Hashable {
+public struct LosslessEdits: Codable, Hashable, Sendable {
     /// Image center is 0.0.
     /// Thanks to rotation, this can extend past (-0.5...0.5).
     public var crop: CGRect?
@@ -74,7 +74,7 @@ public struct LosslessEdits: Codable, Hashable {
     public init(
         crop: CGRect? = nil,
         cropConstraint: CropConstraint = .freeform,
-        rotation: Angle,
+        rotation: Angle = .zero,
         brightness: Double = 0.0,
         exposure: Double = 0.0,
         contrast: Double = 1.0,
