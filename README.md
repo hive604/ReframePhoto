@@ -1,20 +1,20 @@
-# ReframePhoto
+# HiveCompose
 
 A reusable **lossless photo editor component for iOS** built with SwiftUI.
 
-ReframePhoto is designed for apps that want to offer photo editing without destroying the original image. Instead of modifying source pixels directly, edits are stored as lightweight data (`LosslessEdits`) that can be reapplied later to recreate the final result.
+HiveCompose is designed for apps that want to offer photo editing without destroying the original image. Instead of modifying source pixels directly, edits are stored as lightweight data (`LosslessEdits`) that can be reapplied later to recreate the final result.
 
 ## Status
 
-ReframePhoto is under active development and is not yet considered production-ready. APIs, behavior, and implementation details may change as the project evolves.
+HiveCompose is under active development and is not yet considered production-ready. APIs, behavior, and implementation details may change as the project evolves.
 
 The project is being developed in public and released under the MIT License.
 
-## Why ReframePhoto?
+## Why HiveCompose?
 
 Many apps need simple photo editing features such as cropping, straightening, and image adjustments, but do not need a full photo management solution.
 
-ReframePhoto aims to provide:
+HiveCompose aims to provide:
 
 - A reusable SwiftUI editing component
 - Non-destructive editing
@@ -24,7 +24,7 @@ ReframePhoto aims to provide:
 
 ## How It Works
 
-Instead of saving a rewritten image after each edit, ReframePhoto stores edit instructions separately.
+Instead of saving a rewritten image after each edit, HiveCompose stores edit instructions separately.
 
 If your app keeps:
 
@@ -109,4 +109,4 @@ MIT License
 
 ## Feedback
 
-ReframePhoto is being built iteratively. Feedback, testing, and real-world integration ideas are valuable while the API is still taking shape.
+HiveCompose is being built iteratively. Feedback, testing, and real-world integration ideas are valuable while the API is still taking shape.

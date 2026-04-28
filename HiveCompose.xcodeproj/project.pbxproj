@@ -195,7 +195,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 48BE6A8F2F980A0200E87943 /* Build configuration list for PBXProject "ReframePhoto" */;
+			buildConfigurationList = 48BE6A8F2F980A0200E87943 /* Build configuration list for PBXProject "HiveCompose" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -529,7 +529,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		48BE6A8F2F980A0200E87943 /* Build configuration list for PBXProject "ReframePhoto" */ = {
+		48BE6A8F2F980A0200E87943 /* Build configuration list for PBXProject "HiveCompose" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				48BE6A9D2F980A0400E87943 /* Debug */,

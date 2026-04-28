@@ -2,20 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "ReframePhoto",
+    name: "HiveCompose",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
     ],
     products: [
         .library(
-            name: "ReframePhoto",
-            targets: ["ReframePhoto"]
+            name: "HiveCompose",
+            targets: ["HiveCompose"]
         )
     ],
     targets: [
         .target(
-            name: "ReframePhoto"
+            name: "HiveCompose"
         )
     ]
 )

@@ -1,6 +1,6 @@
 //
 //  PhotoEditConfiguration.swift
-//  ReframePhoto
+//  HiveCompose
 //
 //  Created by Steven Fisher on 2026-04-25.
 //
