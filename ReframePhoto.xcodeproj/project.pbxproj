@@ -36,6 +36,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		486000152FA036540061F443 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		4860FEED2F9BFDD90061F443 /* Reframe.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Reframe.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		48BE6A942F980A0200E87943 /* DemoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -78,6 +79,7 @@
 				4860FEEE2F9BFDD90061F443 /* Reframe */,
 				48BE6A952F980A0200E87943 /* Products */,
 				4860FEE62F9BA48D0061F443 /* DemoApp */,
+				486000152FA036540061F443 /* README.md */,
 			);
 			sourceTree = "<group>";
 		};
