@@ -30,7 +30,7 @@ enum LosslessEditGeometry {
         )
     }
 
-    static func visibleImageSize(for fittedSize: CGSize, angle: Angle) -> CGSize {
+    static func visibleImageSize(for fittedSize: CGSize, angle: Double) -> CGSize {
         let fitScale = rotationFitScale(for: fittedSize, angle: angle)
 
         return CGSize(
@@ -39,7 +39,7 @@ enum LosslessEditGeometry {
         )
     }
 
-    static func rotationFitScale(for size: CGSize, angle: Angle) -> CGFloat {
+    static func rotationFitScale(for size: CGSize, angle: Double) -> CGFloat {
         guard size.width > 0, size.height > 0 else { return 1 }
 
         let rotatedSize = rotatedBoundingSize(for: size, angle: angle)
@@ -51,8 +51,8 @@ enum LosslessEditGeometry {
         return min(horizontalScale, verticalScale, 1)
     }
 
-    static func rotatedBoundingSize(for size: CGSize, angle: Angle) -> CGSize {
-        let radians = angle.radians
+    static func rotatedBoundingSize(for size: CGSize, angle: Double) -> CGSize {
+        let radians = Angle(degrees: angle).radians
         let absoluteCosine = abs(cos(radians))
         let absoluteSine = abs(sin(radians))
 
@@ -62,7 +62,7 @@ enum LosslessEditGeometry {
         )
     }
 
-    static func uncroppedFrame(in geometrySize: CGSize, visibleImageSize: CGSize, rotation: Angle) -> CGRect {
+    static func uncroppedFrame(in geometrySize: CGSize, visibleImageSize: CGSize, rotation: Double) -> CGRect {
         let rotatedSize = rotatedBoundingSize(for: visibleImageSize, angle: rotation)
 
         return CGRect(

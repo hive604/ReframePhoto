@@ -162,8 +162,8 @@ struct ControlsView: View {
 
     private var rotationBinding: Binding<Double> {
         Binding(
-            get: { edits.rotation.degrees },
-            set: { edits.rotation = .degrees($0) }
+            get: { edits.rotation },
+            set: { edits.rotation = $0 }
         )
     }
 

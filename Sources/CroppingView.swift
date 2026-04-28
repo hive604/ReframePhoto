@@ -281,7 +281,7 @@ struct CroppingView: View {
             .border(.orange, width: photoEditConfiguration.showFrames ? 2 : 0)
             .scaledToFit()
             .scaleEffect(LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: edits.rotation))
-            .rotationEffect(edits.rotation)
+            .rotationEffect(Angle(degrees: edits.rotation))
             .frame(width: cropWorkspaceSize.width, height: cropWorkspaceSize.height)
             .position(x: cropWorkspaceSize.width / 2, y: cropWorkspaceSize.height / 2)
     }
@@ -771,7 +771,7 @@ enum CropFrameMutation {
         moving: MovingEdges,
         within bounds: CGRect,
         visibleImageSize: CGSize,
-        rotation: Angle,
+        rotation: Double,
         cropConstraint: CropConstraint
     ) -> CGRect {
         let boundary = RotatedImageBoundary(
@@ -1053,13 +1053,14 @@ private struct RotatedImageBoundary {
     init(
         in bounds: CGRect,
         visibleImageSize: CGSize,
-        rotation: Angle
+        rotation: Double
     ) {
+        let angle = Angle(degrees: rotation)
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let halfWidth = visibleImageSize.width / 2
         let halfHeight = visibleImageSize.height / 2
-        let cosine = cos(rotation.radians)
-        let sine = sin(rotation.radians)
+        let cosine = cos(angle.radians)
+        let sine = sin(angle.radians)
 
         corners = [
             CGPoint(x: -halfWidth, y: -halfHeight),
@@ -1176,7 +1177,7 @@ private struct RotatedImageBoundary {
         sourceUIImage: nil,
         imageSize: CGSize(width: 1200, height: 800),
         geometrySize: CGSize(width: 390, height: 640),
-        edits: .constant(LosslessEdits(crop: nil, rotation: .degrees(6))),
+        edits: .constant(LosslessEdits(crop: nil, rotation: 6)),
         cropConstraint: .constant(.freeform),
         photoEditConfiguration: photoEditConfiguration
     )

@@ -75,7 +75,7 @@ public extension UIImage {
 
             let context = UIGraphicsGetCurrentContext()
             context?.translateBy(x: outputCenter.x, y: outputCenter.y)
-            context?.rotate(by: CGFloat(edits.rotation.radians))
+            context?.rotate(by: CGFloat(Angle(degrees: edits.rotation).radians))
             context?.scaleBy(
                 x: (visibleImageSize.width / imageSize.width) * outputScale,
                 y: (visibleImageSize.height / imageSize.height) * outputScale

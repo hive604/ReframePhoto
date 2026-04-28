@@ -206,7 +206,7 @@ private extension PhotoEditor {
                 .resizable()
                 .scaledToFit()
                 .scaleEffect(baseScale * cropScale)
-                .rotationEffect(draftEdits.rotation)
+                .rotationEffect(Angle(degrees: draftEdits.rotation))
                 .offset(
                     x: -cropCenterOffset.width * cropScale,
                     y: -cropCenterOffset.height * cropScale
@@ -247,7 +247,7 @@ private extension PhotoEditor {
         )
     }
 
-    func rotationFitScale(for size: CGSize, angle: Angle) -> CGFloat {
+    func rotationFitScale(for size: CGSize, angle: Double) -> CGFloat {
         guard size.width > 0, size.height > 0 else { return 1 }
 
         let rotatedSize = rotatedBoundingSize(for: size, angle: angle)
@@ -259,8 +259,8 @@ private extension PhotoEditor {
         return min(horizontalScale, verticalScale, 1)
     }
 
-    func rotatedBoundingSize(for size: CGSize, angle: Angle) -> CGSize {
-        let radians = angle.radians
+    func rotatedBoundingSize(for size: CGSize, angle: Double) -> CGSize {
+        let radians = Angle(degrees: angle).radians
         let absoluteCosine = abs(cos(radians))
         let absoluteSine = abs(sin(radians))
 
