@@ -22,7 +22,7 @@ public struct LosslessEdits: Codable, Hashable {
     public var cropConstraint: CropConstraint
 
     /// Rotation of image.
-    var rotation: Double
+    public var rotation: Double
 
     /// Brightness adjustment applied by Core Image color controls.
     ///
