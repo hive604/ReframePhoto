@@ -7,7 +7,7 @@
 
 import CoreGraphics
 
-public enum CropConstraint: String, CaseIterable, Hashable, Codable {
+public enum CropConstraint: String, CaseIterable, Hashable, Codable, Sendable {
     case freeform = "free"
     case square = "1:1"
     case fourThreeLandscape = "4:3"
