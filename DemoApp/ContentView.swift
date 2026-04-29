@@ -7,18 +7,7 @@
 
 import SwiftUI
 import PhotosUI
-import Reframe
-
-private struct SavedEditorSettings: Codable {
-    var losslessEdits: LosslessEdits
-    var allowedAdjustmentRawValues: [String]
-    var dimEnabled: Bool
-    var dimOpacity: Double
-    var blurEnabled: Bool
-    var blurRadius: Double
-    var desaturateEnabled: Bool
-    var desaturateAmount: Double
-}
+import HiveCompose
 
 struct ContentView: View {
     private enum OptionsPanel: String, CaseIterable, Identifiable {
@@ -262,7 +251,7 @@ struct ContentView: View {
                         croppingEffects: croppingEffects,
                         allowedAdjustments: enabledAdjustments
                         )
-                    Reframe.PhotoEditor(
+                    HiveCompose.PhotoEditor(
                         uiImage: uiImage,
                         edits: $losslessEdits,
                         photoEditConfiguration: config

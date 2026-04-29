@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4860FEF52F9BFDD90061F443 /* Reframe.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4860FEED2F9BFDD90061F443 /* Reframe.framework */; };
-		4860FEF62F9BFDD90061F443 /* Reframe.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4860FEED2F9BFDD90061F443 /* Reframe.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		4860FEF52F9BFDD90061F443 /* HiveCompose.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4860FEED2F9BFDD90061F443 /* HiveCompose.framework */; };
+		4860FEF62F9BFDD90061F443 /* HiveCompose.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4860FEED2F9BFDD90061F443 /* HiveCompose.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,7 +28,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				4860FEF62F9BFDD90061F443 /* Reframe.framework in Embed Frameworks */,
+				4860FEF62F9BFDD90061F443 /* HiveCompose.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38,12 +38,12 @@
 /* Begin PBXFileReference section */
 		486000152FA036540061F443 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		486001E62FA03B2E0061F443 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
-		4860FEED2F9BFDD90061F443 /* Reframe.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Reframe.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		4860FEED2F9BFDD90061F443 /* HiveCompose.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = HiveCompose.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		48BE6A942F980A0200E87943 /* DemoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		486002062FA03BE20061F443 /* Exceptions for "Sources" folder in "Reframe" target */ = {
+		486002062FA03BE20061F443 /* Exceptions for "Sources" folder in "HiveCompose" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AdaptiveToolbarLabelStyle.swift,
@@ -61,7 +61,7 @@
 				Reframe.docc,
 				UIImageExtensions.swift,
 			);
-			target = 4860FEEC2F9BFDD90061F443 /* Reframe */;
+			target = 4860FEEC2F9BFDD90061F443 /* HiveCompose */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -69,7 +69,7 @@
 		486001E82FA03BDA0061F443 /* Sources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				486002062FA03BE20061F443 /* Exceptions for "Sources" folder in "Reframe" target */,
+				486002062FA03BE20061F443 /* Exceptions for "Sources" folder in "HiveCompose" target */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -93,7 +93,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4860FEF52F9BFDD90061F443 /* Reframe.framework in Frameworks */,
+				4860FEF52F9BFDD90061F443 /* HiveCompose.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,7 +115,7 @@
 			isa = PBXGroup;
 			children = (
 				48BE6A942F980A0200E87943 /* DemoApp.app */,
-				4860FEED2F9BFDD90061F443 /* Reframe.framework */,
+				4860FEED2F9BFDD90061F443 /* HiveCompose.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -133,9 +133,9 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		4860FEEC2F9BFDD90061F443 /* Reframe */ = {
+		4860FEEC2F9BFDD90061F443 /* HiveCompose */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 4860FEF72F9BFDD90061F443 /* Build configuration list for PBXNativeTarget "Reframe" */;
+			buildConfigurationList = 4860FEF72F9BFDD90061F443 /* Build configuration list for PBXNativeTarget "HiveCompose" */;
 			buildPhases = (
 				4860FEE82F9BFDD90061F443 /* Headers */,
 				4860FEE92F9BFDD90061F443 /* Sources */,
@@ -146,11 +146,11 @@
 			);
 			dependencies = (
 			);
-			name = Reframe;
+			name = HiveCompose;
 			packageProductDependencies = (
 			);
 			productName = Reframe;
-			productReference = 4860FEED2F9BFDD90061F443 /* Reframe.framework */;
+			productReference = 4860FEED2F9BFDD90061F443 /* HiveCompose.framework */;
 			productType = "com.apple.product-type.framework";
 		};
 		48BE6A932F980A0200E87943 /* DemoApp */ = {
@@ -210,7 +210,7 @@
 			projectRoot = "";
 			targets = (
 				48BE6A932F980A0200E87943 /* DemoApp */,
-				4860FEEC2F9BFDD90061F443 /* Reframe */,
+				4860FEEC2F9BFDD90061F443 /* HiveCompose */,
 			);
 		};
 /* End PBXProject section */
@@ -252,7 +252,7 @@
 /* Begin PBXTargetDependency section */
 		4860FEF42F9BFDD90061F443 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 4860FEEC2F9BFDD90061F443 /* Reframe */;
+			target = 4860FEEC2F9BFDD90061F443 /* HiveCompose */;
 			targetProxy = 4860FEF32F9BFDD90061F443 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -520,7 +520,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		4860FEF72F9BFDD90061F443 /* Build configuration list for PBXNativeTarget "Reframe" */ = {
+		4860FEF72F9BFDD90061F443 /* Build configuration list for PBXNativeTarget "HiveCompose" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4860FEF82F9BFDD90061F443 /* Debug */,
