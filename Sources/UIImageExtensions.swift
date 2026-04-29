@@ -31,7 +31,8 @@ public extension UIImage {
         guard size.width > 0, size.height > 0 else { return nil }
         guard outputSize.width > 0, outputSize.height > 0 else { return nil }
 
-        let sourceImage = applyingColorAdjustments(using: edits, targetSize: outputSize) ?? self
+        let normalized = self.normalizedUpOrientation()
+        let sourceImage = normalized.applyingColorAdjustments(using: edits, targetSize: outputSize) ?? normalized
         let imageSize = sourceImage.size
         let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: imageSize)
         let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
@@ -156,6 +157,17 @@ extension UIImage {
         let renderer = UIGraphicsImageRenderer(size: fittedSize, format: format)
         return renderer.image { _ in
             draw(in: CGRect(origin: .zero, size: fittedSize))
+        }
+    }
+
+    func normalizedUpOrientation() -> UIImage {
+        if imageOrientation == .up { return self }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: size))
         }
     }
 }
