@@ -256,23 +256,18 @@ struct ContentView: View {
             }
             .navigationTitle("Photo Picker")
             .task { loadImage() }
-                .fullScreenCover(isPresented: $isShowingEditor) {
-                    if let uiImage = displayedImage {
-                        let config = PhotoEditConfiguration(
-                            croppingEffects: croppingEffects,
-                            allowedAdjustments: enabledAdjustments
+            .fullScreenCover(isPresented: $isShowingEditor) {
+                if let uiImage = displayedImage {
+                    let config = PhotoEditConfiguration(
+                        croppingEffects: croppingEffects,
+                        allowedAdjustments: enabledAdjustments
                         )
-                        Reframe.PhotoEditor(
-                            uiImage: uiImage,
+                    Reframe.PhotoEditor(
+                        uiImage: uiImage,
                         edits: $losslessEdits,
-                        photoEditConfiguration: config,
-                        onCancel: { isShowingEditor = false },
-                        onConfirm: {
-                            persistEditorSettings()
-                            isShowingEditor = false
-                        }
-                    )
-                }
+                        photoEditConfiguration: config
+                        )
+                    }
             }
         }
         .task(id: photoItem) {

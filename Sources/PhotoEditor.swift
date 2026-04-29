@@ -10,6 +10,7 @@ import os
 
 public struct PhotoEditor: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dismiss) private var dismiss
 
     static let checkmark = "checkmark.circle.fill"
     static let xmark = "xmark.circle.fill"
@@ -25,9 +26,6 @@ public struct PhotoEditor: View {
     let sourceUIImage: UIImage?
     let imageSize: CGSize
     @Binding var edits: LosslessEdits
-    let onCancel: (() -> Void)?
-    let onConfirm: (() -> Void)?
-
     @State private var draftEdits: LosslessEdits
     @State private var selectedAdjustment: PhotoEditConfiguration.Adjustment = .tilt
     @State private var selectedSection: AdjustmentSection = .tone
@@ -54,17 +52,13 @@ public struct PhotoEditor: View {
     public init(
         uiImage: UIImage,
         edits: Binding<LosslessEdits>,
-        photoEditConfiguration: PhotoEditConfiguration = PhotoEditConfiguration(),
-        onCancel: (() -> Void)? = nil,
-        onConfirm: (() -> Void)? = nil
+        photoEditConfiguration: PhotoEditConfiguration = PhotoEditConfiguration()
     ) {
         image = Image(uiImage: uiImage)
         sourceUIImage = uiImage
         imageSize = uiImage.size
         _edits = edits
         self.photoEditConfiguration = photoEditConfiguration
-        self.onCancel = onCancel
-        self.onConfirm = onConfirm
         _draftEdits = State(initialValue: edits.wrappedValue)
         let initialAdjustment = PhotoEditConfiguration.Adjustment.allCases.first(where: photoEditConfiguration.allowedAdjustments.contains) ?? .tilt
         _selectedAdjustment = State(initialValue: initialAdjustment)
@@ -342,9 +336,8 @@ private extension PhotoEditor {
     var cancelButton: some View {
         CircularSymbolButton(systemName: Self.xmark) {
             Self.log("tapped cancel")
-            draftEdits = edits
             sanitizeSelection()
-            onCancel?()
+            dismiss()
         }
         .accessibilityLabel("Cancel")
     }
@@ -354,7 +347,7 @@ private extension PhotoEditor {
             Self.log("tapped accept")
             edits = draftEdits
             sanitizeSelection()
-            onConfirm?()
+            dismiss()
         }
         .accessibilityLabel("OK")
     }
