@@ -1,5 +1,5 @@
 //
-//  SavedEditorSettings.swift
+//  DemoAppSettings.swift
 //  HiveCompose
 //
 //  Created by Steven Fisher on 2026-04-28.
@@ -7,8 +7,7 @@
 
 import HiveCompose
 
-struct SavedEditorSettings: Codable {
-    var losslessEdits: LosslessEdits
+struct DemoAppSettings: Codable {
     var allowedAdjustmentRawValues: [String]
     var dimEnabled: Bool
     var dimOpacity: Double
@@ -17,4 +16,3 @@ struct SavedEditorSettings: Codable {
     var desaturateEnabled: Bool
     var desaturateAmount: Double
 }
-

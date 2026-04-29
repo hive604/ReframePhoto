@@ -39,16 +39,16 @@ struct AppDataStore {
     }
 
     // MARK: - Settings IO
-    static func saveSettings(_ settings: SavedEditorSettings, uuid: String) throws {
+    static func saveSettings(_ settings: DemoAppSettings, uuid: String) throws {
         let url = settingsURL(for: uuid)
         let data = try JSONEncoder().encode(settings)
         try data.write(to: url, options: .atomic)
     }
 
-    static func loadSettings(uuid: String) -> SavedEditorSettings? {
+    static func loadSettings(uuid: String) -> DemoAppSettings? {
         let url = settingsURL(for: uuid)
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(SavedEditorSettings.self, from: data)
+        return try? JSONDecoder().decode(DemoAppSettings.self, from: data)
     }
 
     static func deleteSettings(uuid: String) {

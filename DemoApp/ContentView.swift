@@ -24,53 +24,77 @@ struct ContentView: View {
 
     // In-memory image for display
     @State private var displayedImage: UIImage?
+    @State private var losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
 
     // Temporary selection binding for the picker
     @State private var photoItem: PhotosPickerItem?
-    @State private var losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
     @State private var isShowingEditor = false
     @State private var selectedPanel: OptionsPanel = .crop
-    @State private var enabledAdjustments = Set(PhotoEditConfiguration.Adjustment.allCases)
 
     // Cropping effects state
     @State private var croppingEffects: CroppingEffectSet = []
-    @State private var dimEnabled: Bool = false
-    @State private var dimOpacity: Double = 0.45
-    @State private var blurEnabled: Bool = false
-    @State private var blurRadius: Double = 8
-    @State private var desaturateEnabled: Bool = false
-    @State private var desaturateAmount: Double = 1
-
-    private var cropEnabled: Binding<Bool> {
-        Binding(
-            get: { enabledAdjustments.contains(.crop) },
-            set: { isEnabled in
-                if isEnabled {
-                    enabledAdjustments.insert(.crop)
-                } else {
-                    enabledAdjustments.remove(.crop)
-                }
-            }
-        )
-    }
 
     private var configurableAdjustments: [PhotoEditConfiguration.Adjustment] {
         PhotoEditConfiguration.Adjustment.allCases.filter { $0 != .crop }
     }
 
+    // New bindings for updated editing model state:
+    @State private var settings = DemoAppSettings(
+        allowedAdjustmentRawValues: PhotoEditConfiguration.Adjustment.allCases.map(\.rawValue).sorted(),
+        dimEnabled: false,
+        dimOpacity: 0.45,
+        blurEnabled: false,
+        blurRadius: 8,
+        desaturateEnabled: false,
+        desaturateAmount: 1
+    )
+
+    private var enabledAdjustmentsBinding: Binding<Set<PhotoEditConfiguration.Adjustment>> {
+        Binding(
+            get: {
+                Set(settings.allowedAdjustmentRawValues.compactMap(PhotoEditConfiguration.Adjustment.init(rawValue:)))
+            }, set: { newValue in
+                settings.allowedAdjustmentRawValues = newValue.map(\.rawValue).sorted()
+            }
+        )
+    }
+
+    private func persistSettingsModel() {
+        guard let settingsURL else { return }
+        do {
+            let data = try JSONEncoder().encode(settings)
+            try data.write(to: settingsURL, options: .atomic)
+        } catch {
+            print("Failed to persist settings: \(error)")
+        }
+    }
+
     fileprivate func clearImage() {
         withAnimation {
             deleteImage()
-            losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
             displayedImage = nil
             selectedImageUUIDString = nil
 
-            enabledAdjustments = Set(PhotoEditConfiguration.Adjustment.allCases)
-            croppingEffects = []
-            dimEnabled = false; dimOpacity = 0.45
-            blurEnabled = false; blurRadius = 8
-            desaturateEnabled = false; desaturateAmount = 1
+            // Reset settings model instead of individual state vars
+            settings = DemoAppSettings(
+                allowedAdjustmentRawValues: PhotoEditConfiguration.Adjustment.allCases.map(\.rawValue).sorted(),
+                dimEnabled: false,
+                dimOpacity: 0.45,
+                blurEnabled: false,
+                blurRadius: 8,
+                desaturateEnabled: false,
+                desaturateAmount: 1
+            )
+            rebuildEffectsFromSettings()
         }
+    }
+
+    func rebuildEffectsFromSettings() {
+        var set: CroppingEffectSet = []
+        if settings.dimEnabled { set.insert(.dim(settings.dimOpacity)) }
+        if settings.blurEnabled { set.insert(.blur(settings.blurRadius)) }
+        if settings.desaturateEnabled { set.insert(.desaturate(settings.desaturateAmount)) }
+        croppingEffects = set
     }
 
     var body: some View {
@@ -110,54 +134,74 @@ struct ContentView: View {
 
                         if selectedPanel == .crop {
                             VStack(alignment: .leading, spacing: 10) {
-                                Toggle("Enable Crop Tool", isOn: cropEnabled)
+                                Toggle("Enable Crop Tool", isOn: Binding(
+                                    get: { enabledAdjustmentsBinding.wrappedValue.contains(.crop) },
+                                    set: { isOn in
+                                        var set = enabledAdjustmentsBinding.wrappedValue
+                                        if isOn { set.insert(.crop) } else { set.remove(.crop) }
+                                        enabledAdjustmentsBinding.wrappedValue = set
+                                        persistSettingsModel()
+                                    }
+                                ))
 
                                 Divider()
 
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Toggle(isOn: $dimEnabled) {
+                                    Toggle(isOn: $settings.dimEnabled) {
                                         HStack {
                                             Text("Dim")
                                             Spacer()
-                                            Slider(value: $dimOpacity, in: 0...1) { Text("") }
+                                            Slider(value: $settings.dimOpacity, in: 0...1) { Text("") }
                                                 .frame(width: 160)
-                                                .disabled(!dimEnabled)
+                                                .disabled(!settings.dimEnabled)
                                         }
                                     }
+                                    .onChange(of: settings.dimEnabled) { _, _ in rebuildEffectsFromSettings(); persistSettingsModel() }
+                                    .onChange(of: settings.dimOpacity) { _, _ in rebuildEffectsFromSettings(); persistSettingsModel() }
 
-                                    Toggle(isOn: $blurEnabled) {
+                                    Toggle(isOn: $settings.blurEnabled) {
                                         HStack {
                                             Text("Blur")
                                             Spacer()
-                                            Slider(value: $blurRadius, in: 0...20) { Text("") }
+                                            Slider(value: $settings.blurRadius, in: 0...20) { Text("") }
                                                 .frame(width: 160)
-                                                .disabled(!blurEnabled)
+                                                .disabled(!settings.blurEnabled)
                                         }
                                     }
+                                    .onChange(of: settings.blurEnabled) { _, _ in rebuildEffectsFromSettings(); persistSettingsModel() }
+                                    .onChange(of: settings.blurRadius) { _, _ in rebuildEffectsFromSettings(); persistSettingsModel() }
 
-                                    Toggle(isOn: $desaturateEnabled) {
+                                    Toggle(isOn: $settings.desaturateEnabled) {
                                         HStack {
                                             Text("Desaturate")
                                             Spacer()
-                                            Slider(value: $desaturateAmount, in: 0...1) { Text("") }
+                                            Slider(value: $settings.desaturateAmount, in: 0...1) { Text("") }
                                                 .frame(width: 160)
-                                                .disabled(!desaturateEnabled)
+                                                .disabled(!settings.desaturateEnabled)
                                         }
                                     }
+                                    .onChange(of: settings.desaturateEnabled) { _, _ in rebuildEffectsFromSettings(); persistSettingsModel() }
+                                    .onChange(of: settings.desaturateAmount) { _, _ in rebuildEffectsFromSettings(); persistSettingsModel() }
                                 }
-                                .disabled(!cropEnabled.wrappedValue)
-                                .opacity(cropEnabled.wrappedValue ? 1 : 0.45)
+                                .disabled(!enabledAdjustmentsBinding.wrappedValue.contains(.crop))
+                                .opacity(enabledAdjustmentsBinding.wrappedValue.contains(.crop) ? 1 : 0.45)
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Button("All On") {
-                                        enabledAdjustments.formUnion(configurableAdjustments)
+                                        var set = enabledAdjustmentsBinding.wrappedValue
+                                        set.formUnion(PhotoEditConfiguration.Adjustment.allCases.filter { $0 != .crop })
+                                        enabledAdjustmentsBinding.wrappedValue = set
+                                        persistSettingsModel()
                                     }
                                     .buttonStyle(.bordered)
 
                                     Button("All Off") {
-                                        enabledAdjustments.subtract(configurableAdjustments)
+                                        var set = enabledAdjustmentsBinding.wrappedValue
+                                        set.subtract(PhotoEditConfiguration.Adjustment.allCases.filter { $0 != .crop })
+                                        enabledAdjustmentsBinding.wrappedValue = set
+                                        persistSettingsModel()
                                     }
                                     .buttonStyle(.bordered)
 
@@ -172,10 +216,18 @@ struct ContentView: View {
                                     alignment: .leading,
                                     spacing: 8
                                 ) {
-                                    ForEach(configurableAdjustments) { adjustment in
+                                    ForEach(PhotoEditConfiguration.Adjustment.allCases.filter { $0 != .crop }) { adjustment in
                                         Toggle(
                                             adjustment.displayTitle,
-                                            isOn: adjustmentBinding(for: adjustment)
+                                            isOn: Binding(
+                                                get: { enabledAdjustmentsBinding.wrappedValue.contains(adjustment) },
+                                                set: { isOn in
+                                                    var set = enabledAdjustmentsBinding.wrappedValue
+                                                    if isOn { set.insert(adjustment) } else { set.remove(adjustment) }
+                                                    enabledAdjustmentsBinding.wrappedValue = set
+                                                    persistSettingsModel()
+                                                }
+                                            )
                                         )
                                     }
                                 }
@@ -186,33 +238,6 @@ struct ContentView: View {
                 .padding(.horizontal)
                 .frame(maxWidth: 400)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .onChange(of: enabledAdjustments) { _, _ in
-                    persistEditorSettings()
-                }
-                .onChange(of: dimEnabled) { _, _ in
-                    rebuildEffects()
-                    persistEditorSettings()
-                }
-                .onChange(of: dimOpacity) { _, _ in
-                    rebuildEffects()
-                    persistEditorSettings()
-                }
-                .onChange(of: blurEnabled) { _, _ in
-                    rebuildEffects()
-                    persistEditorSettings()
-                }
-                .onChange(of: blurRadius) { _, _ in
-                    rebuildEffects()
-                    persistEditorSettings()
-                }
-                .onChange(of: desaturateEnabled) { _, _ in
-                    rebuildEffects()
-                    persistEditorSettings()
-                }
-                .onChange(of: desaturateAmount) { _, _ in
-                    rebuildEffects()
-                    persistEditorSettings()
-                }
 
                 HStack {
                     PhotosPicker(selection: $photoItem, matching: .images, preferredItemEncoding: .automatic) {
@@ -249,28 +274,32 @@ struct ContentView: View {
                 if let uiImage = displayedImage {
                     let config = PhotoEditConfiguration(
                         croppingEffects: croppingEffects,
-                        allowedAdjustments: enabledAdjustments
-                        )
+                        allowedAdjustments: enabledAdjustmentsBinding.wrappedValue
+                    )
                     HiveCompose.PhotoEditor(
                         uiImage: uiImage,
                         edits: $losslessEdits,
                         photoEditConfiguration: config
-                        )
-                    }
+                    )
+                }
             }
         }
         .task(id: photoItem) {
-             guard let item = photoItem else { return }
+            guard let item = photoItem else { return }
             do {
                 if let data = try await item.loadTransferable(type: Data.self) {
                     selectedImageUUIDString = UUID().uuidString
                     try saveImage(data)
                     displayedImage = UIImage(data: data)
                     losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
+                    persistLosslessEdits()
                 }
             } catch {
                 print("Failed to load/persist image: \(error)")
             }
+        }
+        .onChange(of: losslessEdits) { _, _ in
+            persistLosslessEdits()
         }
     }
 }
@@ -289,31 +318,13 @@ private extension ContentView {
         selectedImageUUIDString != nil ? documentsDirectory().appendingPathComponent("settings_\(selectedImageUUIDString!)") : nil
     }
 
+    private var editsURL: URL? {
+        selectedImageUUIDString != nil ? documentsDirectory().appendingPathComponent("edits_\(selectedImageUUIDString!)") : nil
+    }
+
     func saveImage(_ data: Data) throws {
         // Store the original bytes as-is with a neutral filename (no extension)
         try data.write(to: imageURL!, options: .atomic)
-    }
-
-    func persistEditorSettings() {
-        guard let settingsURL else { return }
-
-        let settings = SavedEditorSettings(
-            losslessEdits: losslessEdits,
-            allowedAdjustmentRawValues: enabledAdjustments.map(\.rawValue).sorted(),
-            dimEnabled: dimEnabled,
-            dimOpacity: dimOpacity,
-            blurEnabled: blurEnabled,
-            blurRadius: blurRadius,
-            desaturateEnabled: desaturateEnabled,
-            desaturateAmount: desaturateAmount
-        )
-
-        do {
-            let data = try JSONEncoder().encode(settings)
-            try data.write(to: settingsURL, options: .atomic)
-        } catch {
-            print("Failed to persist settings: \(error)")
-        }
     }
 
     func loadImage() {
@@ -323,19 +334,16 @@ private extension ContentView {
             clearImage()
         }
 
+        if let editsURL, let data = try? Data(contentsOf: editsURL) {
+            if let decoded = try? JSONDecoder().decode(LosslessEdits.self, from: data) {
+                losslessEdits = decoded
+            }
+        }
+
         if let settingsURL, let data = try? Data(contentsOf: settingsURL) {
-            if let decoded = try? JSONDecoder().decode(SavedEditorSettings.self, from: data) {
-                losslessEdits = decoded.losslessEdits
-                enabledAdjustments = Set(
-                    decoded.allowedAdjustmentRawValues.compactMap(PhotoEditConfiguration.Adjustment.init(rawValue:))
-                )
-                dimEnabled = decoded.dimEnabled
-                dimOpacity = decoded.dimOpacity
-                blurEnabled = decoded.blurEnabled
-                blurRadius = decoded.blurRadius
-                desaturateEnabled = decoded.desaturateEnabled
-                desaturateAmount = decoded.desaturateAmount
-                rebuildEffects()
+            if let decoded = try? JSONDecoder().decode(DemoAppSettings.self, from: data) {
+                settings = decoded
+                rebuildEffectsFromSettings()
             }
         }
     }
@@ -347,28 +355,20 @@ private extension ContentView {
         if let settingsURL {
             try? FileManager.default.removeItem(at: settingsURL)
         }
+        if let editsURL {
+            try? FileManager.default.removeItem(at: editsURL)
+        }
         selectedImageUUIDString = nil
     }
 
-    func rebuildEffects() {
-        var set: CroppingEffectSet = []
-        if dimEnabled { set.insert(.dim(dimOpacity)) }
-        if blurEnabled { set.insert(.blur(blurRadius)) }
-        if desaturateEnabled { set.insert(.desaturate(desaturateAmount)) }
-        croppingEffects = set
-    }
-
-    func adjustmentBinding(for adjustment: PhotoEditConfiguration.Adjustment) -> Binding<Bool> {
-        Binding(
-            get: { enabledAdjustments.contains(adjustment) },
-            set: { isEnabled in
-                if isEnabled {
-                    enabledAdjustments.insert(adjustment)
-                } else {
-                    enabledAdjustments.remove(adjustment)
-                }
-            }
-        )
+    private func persistLosslessEdits() {
+        guard let editsURL else { return }
+        do {
+            let data = try JSONEncoder().encode(losslessEdits)
+            try data.write(to: editsURL, options: .atomic)
+        } catch {
+            print("Failed to persist lossless edits: \(error)")
+        }
     }
 }
 
