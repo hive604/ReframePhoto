@@ -277,6 +277,7 @@ struct ContentView: View {
                     selectedImageUUIDString = UUID().uuidString
                     try saveImage(data)
                     displayedImage = UIImage(data: data)
+                    losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
                 }
             } catch {
                 print("Failed to load/persist image: \(error)")
