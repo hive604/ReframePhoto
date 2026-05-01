@@ -117,9 +117,9 @@ struct ContentView: View {
                         allowedAdjustments: settings.enabledAdjustments
                     )
                     HiveCompose.PhotoEditor(
-                        uiImage: uiImage,
-                        edits: $losslessEdits,
-                        photoEditConfiguration: config
+                        $losslessEdits,
+                        image: uiImage,
+                        configuration: config
                     )
                 }
             }

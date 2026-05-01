@@ -22,13 +22,14 @@ public struct PhotoEditor: View {
         logger.debug("\(str)")
     }
 
-    let image: Image
-    let sourceUIImage: UIImage?
-    let imageSize: CGSize
     @Binding var edits: LosslessEdits
+    let image: UIImage
+    @State private var selectedSection: AdjustmentSection = .tone
+
+    let imageSize: CGSize
+    let save: (() -> Void)?
     @State private var draftEdits: LosslessEdits
     @State private var selectedAdjustment: PhotoEditConfiguration.Adjustment = .tilt
-    @State private var selectedSection: AdjustmentSection = .tone
 
     let photoEditConfiguration: PhotoEditConfiguration
 
@@ -50,17 +51,19 @@ public struct PhotoEditor: View {
     }
 
     public init(
-        uiImage: UIImage,
-        edits: Binding<LosslessEdits>,
-        photoEditConfiguration: PhotoEditConfiguration = PhotoEditConfiguration()
+        _ edits: Binding<LosslessEdits>,
+        image: UIImage,
+        configuration: PhotoEditConfiguration = PhotoEditConfiguration(),
+        save: (() -> Void)? = nil
     ) {
-        image = Image(uiImage: uiImage)
-        sourceUIImage = uiImage
-        imageSize = uiImage.size
         _edits = edits
-        self.photoEditConfiguration = photoEditConfiguration
+        self.image = image
+        self.photoEditConfiguration = configuration
+        self.save = save
+
+        imageSize = image.size
         _draftEdits = State(initialValue: edits.wrappedValue)
-        let initialAdjustment = PhotoEditConfiguration.Adjustment.allCases.first(where: photoEditConfiguration.allowedAdjustments.contains) ?? .tilt
+        let initialAdjustment = PhotoEditConfiguration.Adjustment.allCases.first(where: configuration.allowedAdjustments.contains) ?? .tilt
         _selectedAdjustment = State(initialValue: initialAdjustment)
         _selectedSection = State(initialValue: initialAdjustment.section)
     }
@@ -114,23 +117,23 @@ private extension PhotoEditor {
                 ZStack(alignment: .bottom) {
                     Group {
                         if showsCroppingMode {
-                            CroppingView(
-                                image: image,
-                                sourceUIImage: sourceUIImage,
-                                imageSize: imageSize,
-                                geometrySize: canvasSize,
-                                edits: $draftEdits,
-                                cropConstraint: $draftEdits.cropConstraint,
-                                photoEditConfiguration: photoEditConfiguration,
-                                showsControlsBar: false
-                            )
+                                CroppingView(
+                                    image: Image(uiImage: image),
+                                    sourceUIImage: image,
+                                    imageSize: imageSize,
+                                    geometrySize: canvasSize,
+                                    edits: $draftEdits,
+                                    cropConstraint: $draftEdits.cropConstraint,
+                                    photoEditConfiguration: photoEditConfiguration,
+                                    showsControlsBar: false
+                                )
                         } else if hasAvailableAdjustments {
                             adjustCanvas(
                                 geometrySize: canvasSize,
                                 cropFrame: currentCropFrame
                             )
                         } else {
-                            image
+                            Image(uiImage: image)
                                 .resizable()
                                 .scaledToFit()
                                 .padding()
@@ -265,12 +268,11 @@ private extension PhotoEditor {
     }
 
     func adjustPreviewImage(targetSize: CGSize) -> Image {
-        if let sourceUIImage,
-           let adjustedImage = sourceUIImage.applyingColorAdjustments(using: draftEdits, targetSize: targetSize) {
+        if let adjustedImage = image.applyingColorAdjustments(using: draftEdits, targetSize: targetSize) {
             return Image(uiImage: adjustedImage)
         }
 
-        return image
+        return Image(uiImage: image)
     }
 
     func sanitizeSelection() {
@@ -347,6 +349,7 @@ private extension PhotoEditor {
             Self.log("tapped accept")
             edits = draftEdits
             sanitizeSelection()
+            save?()
             dismiss()
         }
         .accessibilityLabel("OK")
@@ -358,8 +361,8 @@ private extension PhotoEditor {
 #Preview {
     if let image = UIImage(systemName: "photo") {
         PhotoEditor(
-            uiImage: image,
-            edits: .constant(LosslessEdits(crop: nil, rotation: .zero))
+            .constant(LosslessEdits(crop: nil, rotation: .zero)),
+            image: image
         )
     }
 }
