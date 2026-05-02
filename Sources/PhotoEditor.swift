@@ -26,7 +26,6 @@ public struct PhotoEditor: View {
     let image: UIImage
     @State private var selectedSection: AdjustmentSection = .tone
 
-    let imageSize: CGSize
     let save: (() -> Void)?
     @State private var draftEdits: LosslessEdits
     @State private var selectedAdjustment: PhotoEditConfiguration.Adjustment = .tilt
@@ -61,7 +60,6 @@ public struct PhotoEditor: View {
         self.photoEditConfiguration = configuration
         self.save = save
 
-        imageSize = image.size
         _draftEdits = State(initialValue: edits.wrappedValue)
         let initialAdjustment = PhotoEditConfiguration.Adjustment.allCases.first(where: configuration.allowedAdjustments.contains) ?? .tilt
         _selectedAdjustment = State(initialValue: initialAdjustment)
@@ -109,7 +107,7 @@ private extension PhotoEditor {
                 width: geometry.size.width,
                 height: max(0, geometry.size.height - geometryCanvasBottomInset)
             )
-            let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: canvasSize)
+            let fittedSize = LosslessEditGeometry.aspectFitSize(for: image.size, in: canvasSize)
             let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: draftEdits.rotation)
             let currentCropFrame = committedCropFrame(in: canvasSize, visibleImageSize: visibleImageSize)
 
@@ -117,16 +115,14 @@ private extension PhotoEditor {
                 ZStack(alignment: .bottom) {
                     Group {
                         if showsCroppingMode {
-                                CroppingView(
-                                    image: Image(uiImage: image),
-                                    sourceUIImage: image,
-                                    imageSize: imageSize,
-                                    geometrySize: canvasSize,
-                                    edits: $draftEdits,
-                                    cropConstraint: $draftEdits.cropConstraint,
-                                    photoEditConfiguration: photoEditConfiguration,
-                                    showsControlsBar: false
-                                )
+                            CroppingView(
+                                image: image,
+                                geometrySize: canvasSize,
+                                edits: $draftEdits,
+                                cropConstraint: $draftEdits.cropConstraint,
+                                photoEditConfiguration: photoEditConfiguration,
+                                showsControlsBar: false
+                            )
                         } else if hasAvailableAdjustments {
                             adjustCanvas(
                                 geometrySize: canvasSize,
@@ -182,7 +178,7 @@ private extension PhotoEditor {
 
     @ViewBuilder
     func adjustCanvas(geometrySize: CGSize, cropFrame: CGRect) -> some View {
-        let fittedSize = aspectFitSize(for: imageSize, in: geometrySize)
+        let fittedSize = aspectFitSize(for: image.size, in: geometrySize)
         let baseScale = rotationFitScale(for: fittedSize, angle: draftEdits.rotation)
         let cropCenterOffset = CGSize(
             width: cropFrame.midX - (geometrySize.width / 2),

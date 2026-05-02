@@ -13,9 +13,7 @@ struct CroppingView: View {
     private let cropHandleSize: CGFloat = 28
     private let controlsAreaHeight: CGFloat = 76
 
-    let image: Image
-    let sourceUIImage: UIImage?
-    let imageSize: CGSize
+    let image: UIImage
     let geometrySize: CGSize
     @Binding var edits: LosslessEdits
     @Binding var cropConstraint: CropConstraint
@@ -27,7 +25,7 @@ struct CroppingView: View {
     @State private var isShowingAspectRatioPopover = false
 
     var body: some View {
-        let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: cropWorkspaceSize)
+        let fittedSize = LosslessEditGeometry.aspectFitSize(for: image.size, in: cropWorkspaceSize)
         let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
         let currentCropFrame = effectiveCropFrame(visibleImageSize: visibleImageSize)
 
@@ -425,12 +423,8 @@ struct CroppingView: View {
     }
 
     private var previewImage: Image {
-        if let sourceUIImage,
-           let adjustedImage = sourceUIImage.applyingColorAdjustments(using: edits, targetSize: cropWorkspaceSize) {
-            return Image(uiImage: adjustedImage)
-        }
-
-        return image
+        let adjustedImage = image.applyingColorAdjustments(using: edits, targetSize: cropWorkspaceSize)
+        return Image(uiImage: adjustedImage!)
     }
 }
 
@@ -1081,9 +1075,7 @@ private struct RotatedImageBoundary {
         croppingEffects: CroppingEffectSet([.dim(opacity: 0.4)])
     )
     CroppingView(
-        image: Image(systemName: "photo"),
-        sourceUIImage: nil,
-        imageSize: CGSize(width: 1200, height: 800),
+        image: UIImage(systemName: "photo")!,
         geometrySize: CGSize(width: 390, height: 640),
         edits: .constant(LosslessEdits(crop: nil, rotation: .degrees(6))),
         cropConstraint: .constant(.freeform),
