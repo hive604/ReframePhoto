@@ -32,63 +32,61 @@ struct CroppingView: View {
         let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
         let currentCropFrame = effectiveCropFrame(visibleImageSize: visibleImageSize)
 
-        VStack(spacing: 0) {
-            ZStack {
-                baseImage(fittedSize: fittedSize)
+        ZStack {
+            baseImage(fittedSize: fittedSize)
 
-                if blurRadius > 0 || desaturateAmount > 0 {
-                    outsideCropEffectImage(fittedSize: fittedSize)
-                        .mask(
-                            CropDimmedAreaShape(
-                                outerRect: cropWorkspaceRect,
-                                cropRect: currentCropFrame
-                            )
-                            .fill(style: FillStyle(eoFill: true, antialiased: false))
+            if blurRadius > 0 || desaturateAmount > 0 {
+                outsideCropEffectImage(fittedSize: fittedSize)
+                    .mask(
+                        CropDimmedAreaShape(
+                            outerRect: cropWorkspaceRect,
+                            cropRect: currentCropFrame
                         )
-                }
-
-                CropDimmedAreaShape(
-                    outerRect: cropWorkspaceRect,
-                    cropRect: currentCropFrame
-                )
-                .fill(.black.opacity(dimOpacity), style: FillStyle(eoFill: true))
-
-                Rectangle()
-                    .fill(.clear)
-                    .contentShape(Rectangle())
-                    .overlay {
-                        Rectangle()
-                            .stroke(.white, lineWidth: 2)
-                    }
-                    .frame(width: currentCropFrame.width, height: currentCropFrame.height)
-                    .position(x: currentCropFrame.midX, y: currentCropFrame.midY)
-                    .gesture(
-                        DragGesture()
-                            .onChanged { value in
-                                beginCropGesture(from: currentCropFrame)
-                                updateCropFrame(
-                                    byTranslatingFrom: cropGestureStartFrame ?? currentCropFrame,
-                                    translation: value.translation,
-                                    visibleImageSize: visibleImageSize
-                                )
-                            }
-                            .onEnded { _ in
-                                cropGestureStartFrame = nil
-                            }
+                        .fill(style: FillStyle(eoFill: true, antialiased: false))
                     )
-
-                cropEdgeHandle(.top, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-                cropEdgeHandle(.bottom, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-                cropEdgeHandle(.left, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-                cropEdgeHandle(.right, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-
-                cropCornerHandle(.topLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-                cropCornerHandle(.topRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-                cropCornerHandle(.bottomLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-                cropCornerHandle(.bottomRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
             }
-            .frame(width: canvasSize.width, height: canvasSize.height)
+
+            CropDimmedAreaShape(
+                outerRect: cropWorkspaceRect,
+                cropRect: currentCropFrame
+            )
+            .fill(.black.opacity(dimOpacity), style: FillStyle(eoFill: true))
+
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .overlay {
+                    Rectangle()
+                        .stroke(.white, lineWidth: 2)
+                }
+                .frame(width: currentCropFrame.width, height: currentCropFrame.height)
+                .position(x: currentCropFrame.midX, y: currentCropFrame.midY)
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            beginCropGesture(from: currentCropFrame)
+                            updateCropFrame(
+                                byTranslatingFrom: cropGestureStartFrame ?? currentCropFrame,
+                                translation: value.translation,
+                                visibleImageSize: visibleImageSize
+                            )
+                        }
+                        .onEnded { _ in
+                            cropGestureStartFrame = nil
+                        }
+                )
+
+            cropEdgeHandle(.top, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            cropEdgeHandle(.bottom, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            cropEdgeHandle(.left, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            cropEdgeHandle(.right, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+
+            cropCornerHandle(.topLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            cropCornerHandle(.topRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            cropCornerHandle(.bottomLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
+            cropCornerHandle(.bottomRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
         }
+        .frame(width: canvasSize.width, height: canvasSize.height)
         .onChange(of: edits.cropConstraint) { _, _ in
             // External aspect-ratio changes should defer to the committed crop state.
             draftCropFrame = nil
@@ -259,12 +257,20 @@ struct CroppingView: View {
     }
 
     private func commitCropFrame(_ cropFrame: CGRect, visibleImageSize: CGSize) {
-        let clamped = CropFrameMutation.clamped(cropFrame: cropFrame.standardized, to: cropWorkspaceRect)
+        let clamped = cropBounds(visibleImageSize: visibleImageSize).clamped(cropFrame.standardized)
         draftCropFrame = clamped
         edits.crop = LosslessEditGeometry.normalizedCrop(
             from: clamped,
             in: canvasSize,
             visibleImageSize: visibleImageSize
+        )
+    }
+
+    private func cropBounds(visibleImageSize: CGSize) -> CropBounds {
+        CropBounds(
+            in: cropWorkspaceRect,
+            visibleImageSize: visibleImageSize,
+            rotation: edits.rotation
         )
     }
 

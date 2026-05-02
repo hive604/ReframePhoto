@@ -31,4 +31,23 @@ struct CropBounds {
             height: rotatedSize.height
         )
     }
+
+    func clamped(_ cropFrame: CGRect) -> CGRect {
+        var clamped = cropFrame
+
+        if clamped.minX < maximumFrame.minX {
+            clamped.origin.x = maximumFrame.minX
+        }
+        if clamped.minY < maximumFrame.minY {
+            clamped.origin.y = maximumFrame.minY
+        }
+        if clamped.maxX > maximumFrame.maxX {
+            clamped.origin.x = maximumFrame.maxX - clamped.width
+        }
+        if clamped.maxY > maximumFrame.maxY {
+            clamped.origin.y = maximumFrame.maxY - clamped.height
+        }
+
+        return clamped
+    }
 }
