@@ -11,21 +11,25 @@ struct CroppingView: View {
     private let minimumNormalizedCropSize: CGFloat = 0.15
     private let minimumStoredCropDimension: CGFloat = 0.0001
     private let cropHandleSize: CGFloat = 28
-    private let controlsAreaHeight: CGFloat = 76
 
     let image: UIImage
-    let geometrySize: CGSize
+    let canvasSize: CGSize
     @Binding var edits: LosslessEdits
-    @Binding var cropConstraint: CropConstraint
     let photoEditConfiguration: PhotoEditConfiguration
-    var showsControlsBar: Bool = true
 
     @State private var draftCropFrame: CGRect?
     @State private var cropGestureStartFrame: CGRect?
     @State private var isShowingAspectRatioPopover = false
 
+    init(image: UIImage, canvasSize: CGSize, edits: Binding<LosslessEdits>, photoEditConfiguration: PhotoEditConfiguration) {
+        self.image = image
+        self.canvasSize = canvasSize
+        _edits = edits
+        self.photoEditConfiguration = photoEditConfiguration
+    }
+
     var body: some View {
-        let fittedSize = LosslessEditGeometry.aspectFitSize(for: image.size, in: cropWorkspaceSize)
+        let fittedSize = LosslessEditGeometry.aspectFitSize(for: image.size, in: canvasSize)
         let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
         let currentCropFrame = effectiveCropFrame(visibleImageSize: visibleImageSize)
 
@@ -84,57 +88,17 @@ struct CroppingView: View {
                 cropCornerHandle(.bottomLeft, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
                 cropCornerHandle(.bottomRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
             }
-            .frame(width: cropWorkspaceSize.width, height: cropWorkspaceSize.height)
-
-            if showsControlsBar {
-                controlsBar(currentCropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-            }
+            .frame(width: canvasSize.width, height: canvasSize.height)
         }
-        .onChange(of: cropConstraint) { _, _ in
+        .onChange(of: edits.cropConstraint) { _, _ in
             // External aspect-ratio changes should defer to the committed crop state.
             draftCropFrame = nil
             cropGestureStartFrame = nil
         }
     }
 
-    private var cropWorkspaceSize: CGSize {
-        CGSize(
-            width: geometrySize.width,
-            height: max(0, geometrySize.height - (showsControlsBar ? controlsAreaHeight : 0))
-        )
-    }
-
     private var cropWorkspaceRect: CGRect {
-        CGRect(origin: .zero, size: cropWorkspaceSize)
-    }
-
-    private func controlsBar(currentCropFrame: CGRect, visibleImageSize: CGSize) -> some View {
-        HStack {
-            Spacer()
-
-            Button("Aspect Ratio") {
-                isShowingAspectRatioPopover = true
-            }
-            .buttonStyle(.bordered)
-            .popover(isPresented: $isShowingAspectRatioPopover, arrowEdge: .bottom) {
-                aspectRatioPopover(currentCropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
-            }
-
-            Button("Reset Crop") {
-                edits.crop = nil
-                draftCropFrame = nil
-                cropGestureStartFrame = nil
-                cropConstraint = .freeform
-            }
-            .buttonStyle(.bordered)
-
-            Spacer()
-        }
-        .padding(.horizontal)
-        .padding(.top, 12)
-        .padding(.bottom, 20)
-        .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
+        CGRect(origin: .zero, size: canvasSize)
     }
 
     private func aspectRatioPopover(currentCropFrame: CGRect, visibleImageSize: CGSize) -> some View {
@@ -147,7 +111,7 @@ struct CroppingView: View {
         ) {
             ForEach(CropConstraint.displayOrder, id: \.self) { constraint in
                 Button {
-                    cropConstraint = constraint
+                    edits.cropConstraint = constraint
                     updateCropFrame(
                         for: constraint,
                         from: currentCropFrame,
@@ -159,7 +123,7 @@ struct CroppingView: View {
                         Text(constraint.label)
                             .font(.callout.weight(.medium))
                         Spacer(minLength: 8)
-                        if cropConstraint == constraint {
+                        if edits.cropConstraint == constraint {
                             Image(systemName: "checkmark")
                                 .font(.caption.weight(.bold))
                         }
@@ -280,8 +244,8 @@ struct CroppingView: View {
             .scaledToFit()
             .scaleEffect(LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: edits.rotation))
             .rotationEffect(edits.rotation)
-            .frame(width: cropWorkspaceSize.width, height: cropWorkspaceSize.height)
-            .position(x: cropWorkspaceSize.width / 2, y: cropWorkspaceSize.height / 2)
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .position(x: canvasSize.width / 2, y: canvasSize.height / 2)
     }
 
     private func outsideCropEffectImage(fittedSize: CGSize) -> some View {
@@ -306,13 +270,13 @@ struct CroppingView: View {
            crop.height > minimumStoredCropDimension {
             return LosslessEditGeometry.croppedFrame(
                 from: crop,
-                in: cropWorkspaceSize,
+                in: canvasSize,
                 visibleImageSize: visibleImageSize
             )
         }
 
         return LosslessEditGeometry.uncroppedFrame(
-            in: cropWorkspaceSize,
+            in: canvasSize,
             visibleImageSize: visibleImageSize,
             rotation: edits.rotation
         )
@@ -343,7 +307,7 @@ struct CroppingView: View {
             within: cropWorkspaceRect,
             visibleImageSize: visibleImageSize,
             rotation: edits.rotation,
-            cropConstraint: cropConstraint
+            cropConstraint: edits.cropConstraint
         )
         commitCropFrame(constrained, visibleImageSize: visibleImageSize)
     }
@@ -353,7 +317,7 @@ struct CroppingView: View {
         draftCropFrame = clamped
         edits.crop = LosslessEditGeometry.normalizedCrop(
             from: clamped,
-            in: cropWorkspaceSize,
+            in: canvasSize,
             visibleImageSize: visibleImageSize
         )
     }
@@ -379,7 +343,7 @@ struct CroppingView: View {
             translation: translation,
             minimumNormalizedCropSize: minimumNormalizedCropSize,
             visibleImageSize: visibleImageSize,
-            cropConstraint: cropConstraint
+            cropConstraint: edits.cropConstraint
         )
         commitConstrainedCropFrame(updated, moving: .corner(handle), visibleImageSize: visibleImageSize)
     }
@@ -396,7 +360,7 @@ struct CroppingView: View {
             translation: translation,
             minimumNormalizedCropSize: minimumNormalizedCropSize,
             visibleImageSize: visibleImageSize,
-            cropConstraint: cropConstraint
+            cropConstraint: edits.cropConstraint
         )
         commitConstrainedCropFrame(updated, moving: .edge(handle), visibleImageSize: visibleImageSize)
     }
@@ -423,7 +387,7 @@ struct CroppingView: View {
     }
 
     private var previewImage: Image {
-        let adjustedImage = image.applyingColorAdjustments(using: edits, targetSize: cropWorkspaceSize)
+        let adjustedImage = image.applyingColorAdjustments(using: edits, targetSize: canvasSize)
         return Image(uiImage: adjustedImage!)
     }
 }
@@ -1076,9 +1040,8 @@ private struct RotatedImageBoundary {
     )
     CroppingView(
         image: UIImage(systemName: "photo")!,
-        geometrySize: CGSize(width: 390, height: 640),
+        canvasSize: CGSize(width: 390, height: 640),
         edits: .constant(LosslessEdits(crop: nil, rotation: .degrees(6))),
-        cropConstraint: .constant(.freeform),
         photoEditConfiguration: photoEditConfiguration
     )
     .background(Color.black)

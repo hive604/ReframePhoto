@@ -117,11 +117,9 @@ private extension PhotoEditor {
                         if showsCroppingMode {
                             CroppingView(
                                 image: image,
-                                geometrySize: canvasSize,
+                                canvasSize: canvasSize,
                                 edits: $draftEdits,
-                                cropConstraint: $draftEdits.cropConstraint,
-                                photoEditConfiguration: photoEditConfiguration,
-                                showsControlsBar: false
+                                photoEditConfiguration: photoEditConfiguration
                             )
                         } else if hasAvailableAdjustments {
                             adjustCanvas(
