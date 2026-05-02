@@ -19,7 +19,6 @@ struct CroppingView: View {
 
     @State private var draftCropFrame: CGRect?
     @State private var cropGestureStartFrame: CGRect?
-    @State private var isShowingAspectRatioPopover = false
 
     init(image: UIImage, canvasSize: CGSize, edits: Binding<LosslessEdits>, photoEditConfiguration: PhotoEditConfiguration) {
         self.image = image
@@ -101,44 +100,6 @@ struct CroppingView: View {
         CGRect(origin: .zero, size: canvasSize)
     }
 
-    private func aspectRatioPopover(currentCropFrame: CGRect, visibleImageSize: CGSize) -> some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ],
-            spacing: 12
-        ) {
-            ForEach(CropConstraint.displayOrder, id: \.self) { constraint in
-                Button {
-                    edits.cropConstraint = constraint
-                    updateCropFrame(
-                        for: constraint,
-                        from: currentCropFrame,
-                        visibleImageSize: visibleImageSize
-                    )
-                    isShowingAspectRatioPopover = false
-                } label: {
-                    HStack {
-                        Text(constraint.label)
-                            .font(.callout.weight(.medium))
-                        Spacer(minLength: 8)
-                        if edits.cropConstraint == constraint {
-                            Image(systemName: "checkmark")
-                                .font(.caption.weight(.bold))
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding()
-        .frame(width: 240)
-    }
 
     private func cropCornerHandle(
         _ handle: CropCornerHandle,
@@ -387,8 +348,8 @@ struct CroppingView: View {
     }
 
     private var previewImage: Image {
-        let adjustedImage = image.applyingColorAdjustments(using: edits, targetSize: canvasSize)
-        return Image(uiImage: adjustedImage!)
+        let adjustedImage = image.applyingColorAdjustments(using: edits, targetSize: canvasSize) ?? image
+        return Image(uiImage: adjustedImage)
     }
 }
 
@@ -737,44 +698,49 @@ enum CropFrameMutation {
             visibleImageSize: visibleImageSize,
             rotation: rotation
         )
+        let standardizedCropFrame = cropFrame.standardized
 
         switch moving {
         case .all:
-            var constrained = clamped(cropFrame: cropFrame.standardized, to: bounds)
-            constrained = clampTranslatedCropFrame(constrained, within: boundary)
-            return clamped(cropFrame: constrained, to: bounds)
+            return clamped(cropFrame: standardizedCropFrame, to: boundary.maximumAllowedFrame)
         case .corner, .edge:
-            var constrained = cropFrame.standardized
             if let ratio = cropConstraint.ratio {
-                constrained = clampAspectLockedCropFrame(
-                    constrained,
+                return clampAspectLockedCropFrame(
+                    standardizedCropFrame,
                     moving: moving,
                     within: boundary,
                     ratio: ratio
                 )
-            } else {
-                for edge in moving.affectedEdges {
-                    switch edge {
-                    case .top:
-                        constrained = clampTopEdge(of: constrained, within: boundary)
-                    case .bottom:
-                        constrained = clampBottomEdge(of: constrained, within: boundary)
-                    case .left:
-                        constrained = clampLeftEdge(of: constrained, within: boundary)
-                    case .right:
-                        constrained = clampRightEdge(of: constrained, within: boundary)
-                    }
-                }
             }
-            return constrained
+
+            return clampFreeformCropFrame(
+                standardizedCropFrame,
+                moving: moving,
+                within: boundary
+            )
         }
     }
 
-    private static func clampTranslatedCropFrame(
+
+    private static func clampFreeformCropFrame(
         _ cropFrame: CGRect,
+        moving: MovingEdges,
         within boundary: RotatedImageBoundary
     ) -> CGRect {
         var constrained = cropFrame
+
+        for edge in moving.affectedEdges {
+            switch edge {
+            case .top:
+                constrained = clampTopEdge(of: constrained, within: boundary)
+            case .bottom:
+                constrained = clampBottomEdge(of: constrained, within: boundary)
+            case .left:
+                constrained = clampLeftEdge(of: constrained, within: boundary)
+            case .right:
+                constrained = clampRightEdge(of: constrained, within: boundary)
+            }
+        }
 
         return constrained
     }
@@ -791,7 +757,7 @@ enum CropFrameMutation {
         case let .edge(handle):
             clampAspectLockedEdgeCropFrame(cropFrame, handle: handle, within: boundary, ratio: ratio)
         case .all:
-            clampTranslatedCropFrame(cropFrame, within: boundary)
+            clamped(cropFrame: cropFrame, to: boundary.maximumAllowedFrame)
         }
     }
 
@@ -805,8 +771,7 @@ enum CropFrameMutation {
 
         return binarySearchValidFrame(
             initialWidthOrHeight: proposedWidth,
-            minimumValue: 1,
-            moving: .corner(handle)
+            minimumValue: 1
         ) { value in
             let height = value / ratio
 
@@ -841,8 +806,7 @@ enum CropFrameMutation {
         case .top:
             return binarySearchValidFrame(
                 initialWidthOrHeight: cropFrame.height,
-                minimumValue: 1,
-                moving: .edge(handle)
+                minimumValue: 1
             ) { value in
                 let width = value * ratio
                 return CGRect(
@@ -857,8 +821,7 @@ enum CropFrameMutation {
         case .bottom:
             return binarySearchValidFrame(
                 initialWidthOrHeight: cropFrame.height,
-                minimumValue: 1,
-                moving: .edge(handle)
+                minimumValue: 1
             ) { value in
                 let width = value * ratio
                 return CGRect(
@@ -873,8 +836,7 @@ enum CropFrameMutation {
         case .left:
             return binarySearchValidFrame(
                 initialWidthOrHeight: cropFrame.width,
-                minimumValue: 1,
-                moving: .edge(handle)
+                minimumValue: 1
             ) { value in
                 let height = value / ratio
                 return CGRect(
@@ -889,8 +851,7 @@ enum CropFrameMutation {
         case .right:
             return binarySearchValidFrame(
                 initialWidthOrHeight: cropFrame.width,
-                minimumValue: 1,
-                moving: .edge(handle)
+                minimumValue: 1
             ) { value in
                 let height = value / ratio
                 return CGRect(
@@ -930,7 +891,6 @@ enum CropFrameMutation {
     private static func binarySearchValidFrame(
         initialWidthOrHeight: CGFloat,
         minimumValue: CGFloat,
-        moving: MovingEdges,
         builder: (CGFloat) -> CGRect,
         validator: (CGRect) -> Bool
     ) -> CGRect {
@@ -987,7 +947,6 @@ enum CropFrameMutation {
 }
 
 private struct RotatedImageBoundary {
-    let corners: [CGPoint]
     let maximumAllowedFrame: CGRect
 
     init(
@@ -1001,7 +960,7 @@ private struct RotatedImageBoundary {
         let cosine = cos(rotation.radians)
         let sine = sin(rotation.radians)
 
-        corners = [
+        let corners = [
             CGPoint(x: -halfWidth, y: -halfHeight),
             CGPoint(x: halfWidth, y: -halfHeight),
             CGPoint(x: halfWidth, y: halfHeight),
@@ -1027,10 +986,7 @@ private struct RotatedImageBoundary {
     }
 
     func contains(_ point: CGPoint, epsilon: CGFloat = 0.5) -> Bool {
-        point.x >= maximumAllowedFrame.minX - epsilon &&
-        point.x <= maximumAllowedFrame.maxX + epsilon &&
-        point.y >= maximumAllowedFrame.minY - epsilon &&
-        point.y <= maximumAllowedFrame.maxY + epsilon
+        maximumAllowedFrame.insetBy(dx: -epsilon, dy: -epsilon).contains(point)
     }
 }
 
