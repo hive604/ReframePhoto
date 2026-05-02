@@ -818,21 +818,6 @@ enum CropFrameMutation {
     ) -> CGRect {
         var constrained = cropFrame
 
-        for _ in 0..<4 {
-            if !edgeIsValid(.left, in: constrained, within: boundary) {
-                constrained.origin.x = boundary.leftLimit(forYValues: [constrained.minY, constrained.maxY])
-            }
-            if !edgeIsValid(.right, in: constrained, within: boundary) {
-                constrained.origin.x = boundary.rightLimit(forYValues: [constrained.minY, constrained.maxY]) - constrained.width
-            }
-            if !edgeIsValid(.top, in: constrained, within: boundary) {
-                constrained.origin.y = boundary.topLimit(forXValues: [constrained.minX, constrained.maxX])
-            }
-            if !edgeIsValid(.bottom, in: constrained, within: boundary) {
-                constrained.origin.y = boundary.bottomLimit(forXValues: [constrained.minX, constrained.maxX]) - constrained.height
-            }
-        }
-
         return constrained
     }
 
@@ -964,23 +949,23 @@ enum CropFrameMutation {
 
     private static func clampTopEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
         let maxY = cropFrame.maxY
-        let minY = max(cropFrame.minY, boundary.topLimit(forXValues: [cropFrame.minX, cropFrame.maxX]))
+        let minY = max(cropFrame.minY, boundary.maximumAllowedFrame.minY)
         return CGRect(x: cropFrame.minX, y: minY, width: cropFrame.width, height: maxY - minY)
     }
 
     private static func clampBottomEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
-        let maxY = min(cropFrame.maxY, boundary.bottomLimit(forXValues: [cropFrame.minX, cropFrame.maxX]))
+        let maxY = min(cropFrame.maxY, boundary.maximumAllowedFrame.maxY)
         return CGRect(x: cropFrame.minX, y: cropFrame.minY, width: cropFrame.width, height: maxY - cropFrame.minY)
     }
 
     private static func clampLeftEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
         let maxX = cropFrame.maxX
-        let minX = max(cropFrame.minX, boundary.leftLimit(forYValues: [cropFrame.minY, cropFrame.maxY]))
+        let minX = max(cropFrame.minX, boundary.maximumAllowedFrame.minX)
         return CGRect(x: minX, y: cropFrame.minY, width: maxX - minX, height: cropFrame.height)
     }
 
     private static func clampRightEdge(of cropFrame: CGRect, within boundary: RotatedImageBoundary) -> CGRect {
-        let maxX = min(cropFrame.maxX, boundary.rightLimit(forYValues: [cropFrame.minY, cropFrame.maxY]))
+        let maxX = min(cropFrame.maxX, boundary.maximumAllowedFrame.maxX)
         return CGRect(x: cropFrame.minX, y: cropFrame.minY, width: maxX - cropFrame.minX, height: cropFrame.height)
     }
 
@@ -1045,10 +1030,7 @@ enum CropFrameMutation {
 
 private struct RotatedImageBoundary {
     let corners: [CGPoint]
-    let minX: CGFloat
-    let maxX: CGFloat
-    let minY: CGFloat
-    let maxY: CGFloat
+    let maximumAllowedFrame: CGRect
 
     init(
         in bounds: CGRect,
@@ -1073,97 +1055,24 @@ private struct RotatedImageBoundary {
             )
         }
 
-        minX = corners.map(\.x).min() ?? bounds.minX
-        maxX = corners.map(\.x).max() ?? bounds.maxX
-        minY = corners.map(\.y).min() ?? bounds.minY
-        maxY = corners.map(\.y).max() ?? bounds.maxY
+        let minX = corners.map(\.x).min() ?? bounds.minX
+        let maxX = corners.map(\.x).max() ?? bounds.maxX
+        let minY = corners.map(\.y).min() ?? bounds.minY
+        let maxY = corners.map(\.y).max() ?? bounds.maxY
+
+        maximumAllowedFrame = CGRect(
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        )
     }
 
     func contains(_ point: CGPoint, epsilon: CGFloat = 0.5) -> Bool {
-        point.x >= minX - epsilon &&
-        point.x <= maxX + epsilon &&
-        point.y >= minY - epsilon &&
-        point.y <= maxY + epsilon
-    }
-
-    func topLimit(forXValues xValues: [CGFloat]) -> CGFloat {
-        minY
-    }
-
-    func bottomLimit(forXValues xValues: [CGFloat]) -> CGFloat {
-        maxY
-    }
-
-    func leftLimit(forYValues yValues: [CGFloat]) -> CGFloat {
-        minX
-    }
-
-    func rightLimit(forYValues yValues: [CGFloat]) -> CGFloat {
-        maxX
-    }
-
-    private func sampledVerticalBounds(atXValues xValues: [CGFloat]) -> [ClosedRange<CGFloat>] {
-        xValues.compactMap { verticalRange(atX: $0) }
-    }
-
-    private func sampledHorizontalBounds(atYValues yValues: [CGFloat]) -> [ClosedRange<CGFloat>] {
-        yValues.compactMap { horizontalRange(atY: $0) }
-    }
-
-    private func verticalRange(atX x: CGFloat) -> ClosedRange<CGFloat>? {
-        lineIntersections(
-            with: { p0, p1 in
-                intersectVerticalLine(x: x, from: p0, to: p1)
-            }
-        )
-    }
-
-    private func horizontalRange(atY y: CGFloat) -> ClosedRange<CGFloat>? {
-        lineIntersections(
-            with: { p0, p1 in
-                intersectHorizontalLine(y: y, from: p0, to: p1)
-            }
-        )
-    }
-
-    private func lineIntersections(with intersection: (CGPoint, CGPoint) -> CGFloat?) -> ClosedRange<CGFloat>? {
-        var values: [CGFloat] = []
-
-        for index in corners.indices {
-            let nextIndex = (index + 1) % corners.count
-            if let value = intersection(corners[index], corners[nextIndex]) {
-                if !values.contains(where: { abs($0 - value) < 0.5 }) {
-                    values.append(value)
-                }
-            }
-        }
-
-        guard let minimum = values.min(), let maximum = values.max() else { return nil }
-        return minimum...maximum
-    }
-
-    private func intersectVerticalLine(x: CGFloat, from start: CGPoint, to end: CGPoint) -> CGFloat? {
-        let deltaX = end.x - start.x
-        if abs(deltaX) < 0.0001 {
-            guard abs(x - start.x) < 0.5 else { return nil }
-            return min(start.y, end.y)
-        }
-
-        let t = (x - start.x) / deltaX
-        guard (0...1).contains(t) else { return nil }
-        return start.y + (end.y - start.y) * t
-    }
-
-    private func intersectHorizontalLine(y: CGFloat, from start: CGPoint, to end: CGPoint) -> CGFloat? {
-        let deltaY = end.y - start.y
-        if abs(deltaY) < 0.0001 {
-            guard abs(y - start.y) < 0.5 else { return nil }
-            return min(start.x, end.x)
-        }
-
-        let t = (y - start.y) / deltaY
-        guard (0...1).contains(t) else { return nil }
-        return start.x + (end.x - start.x) * t
+        point.x >= maximumAllowedFrame.minX - epsilon &&
+        point.x <= maximumAllowedFrame.maxX + epsilon &&
+        point.y >= maximumAllowedFrame.minY - epsilon &&
+        point.y <= maximumAllowedFrame.maxY + epsilon
     }
 }
 
