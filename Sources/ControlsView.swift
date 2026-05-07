@@ -29,6 +29,24 @@ enum AdjustmentSection: String, CaseIterable, Identifiable {
     }
 }
 
+private enum CompactSection: String, CaseIterable, Identifiable {
+    case geometry
+    case tone
+    case color
+    case whiteBalance
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .geometry: return "Geometry"
+        case .tone: return "Tone"
+        case .color: return "Color"
+        case .whiteBalance: return "White Balance"
+        }
+    }
+}
+
 extension PhotoEditConfiguration.Adjustment {
     var title: String {
         switch self {
@@ -139,6 +157,8 @@ struct ControlsView: View {
     @ScaledMetric(relativeTo: .caption2) private var panelPadding: CGFloat = 12
     @ScaledMetric(relativeTo: .caption2) private var sectionSpacing: CGFloat = 16
     @State private var isShowingCropConstraintPopover = false
+    @State private var selectedCompactSection: CompactSection = .geometry
+    @State private var selectedCompactAdjustment: PhotoEditConfiguration.Adjustment? = nil
 
     private var availableTools: [PhotoEditConfiguration.Adjustment] {
         let allowedAdjustments = photoEditConfiguration.allowedAdjustments
@@ -152,6 +172,32 @@ struct ControlsView: View {
     private var availableSections: [AdjustmentSection] {
         AdjustmentSection.allCases.filter { section in
             availableTools.contains(where: { $0.section == section })
+        }
+    }
+
+    private var availableCompactSections: [CompactSection] {
+        var sections: [CompactSection] = []
+        // Include geometry if either crop or tilt is allowed
+        if photoEditConfiguration.allowedAdjustments.contains(.crop) || photoEditConfiguration.allowedAdjustments.contains(.tilt) {
+            sections.append(.geometry)
+        }
+        if availableTools.contains(where: { $0.section == .tone }) { sections.append(.tone) }
+        if availableTools.contains(where: { $0.section == .color }) { sections.append(.color) }
+        if availableTools.contains(where: { $0.section == .whiteBalance }) { sections.append(.whiteBalance) }
+        return sections
+    }
+    
+    private func adjustments(for section: CompactSection) -> [PhotoEditConfiguration.Adjustment] {
+        switch section {
+        case .geometry:
+            // Geometry is represented by crop + tilt but combined in UI
+            return availableAdjustments.filter { $0.section == .geometry && $0 != .crop } // tilt only as slider
+        case .tone:
+            return availableAdjustments.filter { $0.section == .tone }
+        case .color:
+            return availableAdjustments.filter { $0.section == .color }
+        case .whiteBalance:
+            return availableAdjustments.filter { $0.section == .whiteBalance }
         }
     }
 
@@ -223,19 +269,39 @@ struct ControlsView: View {
         VStack(alignment: .leading, spacing: rowSpacing) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(availableTools) { adjustment in
+                    ForEach(availableCompactSections) { section in
                         Button {
                             withAnimation(.snappy(duration: 0.25)) {
-                                selectedAdjustment = adjustment
-                                selectedSection = adjustment.section
+                                selectedCompactSection = section
+                                // Keep selectedAdjustment/section in sync for downstream bindings
+                                switch section {
+                                case .geometry:
+                                    selectedAdjustment = .crop
+                                    selectedSection = .geometry
+                                case .tone:
+                                    selectedAdjustment = adjustments(for: section).first ?? selectedAdjustment
+                                    selectedSection = .tone
+                                case .color:
+                                    selectedAdjustment = adjustments(for: section).first ?? selectedAdjustment
+                                    selectedSection = .color
+                                case .whiteBalance:
+                                    selectedAdjustment = adjustments(for: section).first ?? selectedAdjustment
+                                    selectedSection = .whiteBalance
+                                }
+                                if selectedCompactSection != .geometry {
+                                    let sectionAdjustments = adjustments(for: selectedCompactSection)
+                                    selectedCompactAdjustment = sectionAdjustments.first
+                                } else {
+                                    selectedCompactAdjustment = nil
+                                }
                             }
                         } label: {
-                            Label(adjustment.title, systemImage: adjustment.systemImage)
+                            Text(section.title)
                                 .font(.caption2.weight(.medium))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(
-                                    selectedAdjustment == adjustment ? .white.opacity(0.18) : .white.opacity(0.08),
+                                    selectedCompactSection == section ? .white.opacity(0.18) : .white.opacity(0.08),
                                     in: Capsule()
                                 )
                         }
@@ -243,17 +309,46 @@ struct ControlsView: View {
                     }
                 }
             }
+            
+            if selectedCompactSection != .geometry {
+                let sectionAdjustments = adjustments(for: selectedCompactSection)
+                if !sectionAdjustments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(sectionAdjustments) { adj in
+                                Button {
+                                    withAnimation(.snappy(duration: 0.2)) {
+                                        selectedCompactAdjustment = adj
+                                        selectedAdjustment = adj
+                                        selectedSection = adj.section
+                                    }
+                                } label: {
+                                    Label(adj.title, systemImage: adj.systemImage)
+                                        .font(.caption2.weight(.medium))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            (selectedCompactAdjustment ?? sectionAdjustments.first) == adj ? .white.opacity(0.18) : .white.opacity(0.08),
+                                            in: Capsule()
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
 
-            activeCompactControl
+            activeCompactSectionControl
         }
     }
 
     @ViewBuilder
-    private var activeCompactControl: some View {
-        if selectedAdjustment == .crop {
-            aspectRatioRow
-        } else if selectedAdjustment == .tilt {
+    private var activeCompactSectionControl: some View {
+        switch selectedCompactSection {
+        case .geometry:
             VStack(alignment: .leading, spacing: rowSpacing) {
+                aspectRatioRow
                 adjustmentSlider(for: .tilt)
                 HStack(spacing: 12) {
                     Button {
@@ -271,8 +366,10 @@ struct ControlsView: View {
                     .buttonStyle(.bordered)
                 }
             }
-        } else if availableAdjustments.contains(selectedAdjustment) {
-            adjustmentSlider(for: selectedAdjustment)
+        case .tone, .color, .whiteBalance:
+            let sectionAdjustments = adjustments(for: selectedCompactSection)
+            let active = selectedCompactAdjustment ?? sectionAdjustments.first
+            if let active { adjustmentSlider(for: active) }
         }
     }
 
@@ -463,3 +560,4 @@ struct ControlsView: View {
         .font(.caption2)
     }
 }
+
