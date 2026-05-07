@@ -156,6 +156,7 @@ struct ControlsView: View {
     @ScaledMetric(relativeTo: .caption2) private var rowSpacing: CGFloat = 8
     @ScaledMetric(relativeTo: .caption2) private var panelPadding: CGFloat = 12
     @ScaledMetric(relativeTo: .caption2) private var sectionSpacing: CGFloat = 16
+    @ScaledMetric(relativeTo: .caption2) private var compactSegmentHeight: CGFloat = 30
     @State private var isShowingCropConstraintPopover = false
     @State private var selectedCompactSection: CompactSection = .geometry
     @State private var selectedCompactAdjustment: PhotoEditConfiguration.Adjustment? = nil
@@ -186,7 +187,7 @@ struct ControlsView: View {
         if availableTools.contains(where: { $0.section == .whiteBalance }) { sections.append(.whiteBalance) }
         return sections
     }
-    
+
     private func adjustments(for section: CompactSection) -> [PhotoEditConfiguration.Adjustment] {
         switch section {
         case .geometry:
@@ -309,7 +310,7 @@ struct ControlsView: View {
                     }
                 }
             }
-            
+
             if selectedCompactSection != .geometry {
                 let sectionAdjustments = adjustments(for: selectedCompactSection)
                 if !sectionAdjustments.isEmpty {
@@ -326,7 +327,7 @@ struct ControlsView: View {
                                     Label(adj.title, systemImage: adj.systemImage)
                                         .font(.caption2.weight(.medium))
                                         .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
+                                        .frame(height: compactSegmentHeight)
                                         .background(
                                             (selectedCompactAdjustment ?? sectionAdjustments.first) == adj ? .white.opacity(0.18) : .white.opacity(0.08),
                                             in: Capsule()
@@ -560,4 +561,3 @@ struct ControlsView: View {
         .font(.caption2)
     }
 }
-
