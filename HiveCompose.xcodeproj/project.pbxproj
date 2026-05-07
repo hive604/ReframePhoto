@@ -61,6 +61,7 @@
 				PhotoEditConfiguration.swift,
 				PhotoEditor.swift,
 				Reframe.docc,
+				RotationDirection.swift,
 				UIImageExtensions.swift,
 			);
 			target = 4860FEEC2F9BFDD90061F443 /* HiveCompose */;

@@ -15,7 +15,7 @@ struct ContentView: View {
 
     // In-memory image for display
     @State private var displayedImage: UIImage?
-    @State private var losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
+    @State private var losslessEdits = LosslessEdits(crop: nil, rotation: .zero)
 
     // Temporary selection binding for the picker
     @State private var photoItem: PhotosPickerItem?
@@ -131,7 +131,7 @@ struct ContentView: View {
                     selectedImageUUIDString = UUID().uuidString
                     try saveImage(data)
                     displayedImage = UIImage(data: data)
-                    losslessEdits = LosslessEdits(crop: .zero, rotation: .zero)
+                    losslessEdits = LosslessEdits(crop: nil, rotation: .zero)
                     settings = .default
                     persistSettingsModel()
                     persistLosslessEdits()

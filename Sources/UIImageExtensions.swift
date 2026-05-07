@@ -33,9 +33,15 @@ public extension UIImage {
 
         let normalized = self.normalizedUpOrientation()
         let sourceImage = normalized.applyingColorAdjustments(using: edits, targetSize: outputSize) ?? normalized
+
         let imageSize = sourceImage.size
-        let fittedSize = LosslessEditGeometry.aspectFitSize(for: imageSize, in: imageSize)
-        let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
+        let layoutRotation = edits.rotation.nearestQuarterTurn
+        let tiltRotation = edits.rotation - layoutRotation
+        let layoutImageSize = imageSize.rotatedForLayout(by: layoutRotation)
+        let fittedSize = LosslessEditGeometry.aspectFitSize(for: layoutImageSize, in: layoutImageSize)
+        let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: tiltRotation)
+        let renderSize = fittedSize.rotatedForLayout(by: -layoutRotation)
+        let renderScale = LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: tiltRotation)
 
         let cropFrame: CGRect
         if let crop = edits.crop?.standardized,
@@ -43,14 +49,14 @@ public extension UIImage {
            crop.height > 0.0001 {
             cropFrame = LosslessEditGeometry.croppedFrame(
                 from: crop,
-                in: imageSize,
+                in: layoutImageSize,
                 visibleImageSize: visibleImageSize
             )
         } else {
             cropFrame = LosslessEditGeometry.uncroppedFrame(
-                in: imageSize,
+                in: layoutImageSize,
                 visibleImageSize: visibleImageSize,
-                rotation: edits.rotation
+                rotation: tiltRotation
             )
         }
 
@@ -76,17 +82,19 @@ public extension UIImage {
 
             let context = UIGraphicsGetCurrentContext()
             context?.translateBy(x: outputCenter.x, y: outputCenter.y)
-            context?.rotate(by: CGFloat(edits.rotation.radians))
-            context?.scaleBy(
-                x: (visibleImageSize.width / imageSize.width) * outputScale,
-                y: (visibleImageSize.height / imageSize.height) * outputScale
+            context?.scaleBy(x: outputScale, y: outputScale)
+            context?.translateBy(
+                x: layoutImageSize.width / 2 - cropFrame.midX,
+                y: layoutImageSize.height / 2 - cropFrame.midY
             )
+            context?.rotate(by: CGFloat(edits.rotation.radians))
+            context?.scaleBy(x: renderScale, y: renderScale)
 
             let imageRect = CGRect(
-                x: -imageSize.width / 2 - (cropFrame.midX - imageSize.width / 2),
-                y: -imageSize.height / 2 - (cropFrame.midY - imageSize.height / 2),
-                width: imageSize.width,
-                height: imageSize.height
+                x: -renderSize.width / 2,
+                y: -renderSize.height / 2,
+                width: renderSize.width,
+                height: renderSize.height
             )
 
             sourceImage.draw(in: imageRect)
@@ -169,5 +177,39 @@ extension UIImage {
         return renderer.image { _ in
             self.draw(in: CGRect(origin: .zero, size: size))
         }
+    }
+}
+
+
+private extension CGSize {
+    func rotatedForLayout(by angle: Angle) -> CGSize {
+        switch angle.normalizedQuarterTurns {
+        case 1, 3:
+            return CGSize(width: height, height: width)
+        default:
+            return self
+        }
+    }
+}
+
+private extension Angle {
+    static prefix func - (angle: Angle) -> Angle {
+        .degrees(-angle.degrees)
+    }
+
+    static func - (lhs: Angle, rhs: Angle) -> Angle {
+        .degrees(lhs.degrees - rhs.degrees)
+    }
+
+    var nearestQuarterTurn: Angle {
+        .degrees(Double(roundedQuarterTurns) * 90)
+    }
+
+    var normalizedQuarterTurns: Int {
+        ((roundedQuarterTurns % 4) + 4) % 4
+    }
+
+    private var roundedQuarterTurns: Int {
+        Int((degrees / 90).rounded())
     }
 }

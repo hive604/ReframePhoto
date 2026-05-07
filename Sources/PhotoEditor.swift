@@ -16,7 +16,7 @@ public struct PhotoEditor: View {
     static let xmark = "xmark.circle.fill"
 
     private static let logger = Logger(subsystem: "com.hive604.Reframe", category: "PhotoEditor")
-    private let minimumStoredCropDimension: CGFloat = 0.0001
+    private static let minimumStoredCropDimension: CGFloat = 0.0001
 
     private static func log(_ str: String) {
         logger.debug("\(str)")
@@ -107,9 +107,8 @@ private extension PhotoEditor {
                 width: geometry.size.width,
                 height: max(0, geometry.size.height - geometryCanvasBottomInset)
             )
-            let fittedSize = LosslessEditGeometry.aspectFitSize(for: image.size, in: canvasSize)
-            let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: draftEdits.rotation)
-            let currentCropFrame = committedCropFrame(in: canvasSize, visibleImageSize: visibleImageSize)
+            let displayGeometry = displayGeometry(in: canvasSize)
+            let currentCropFrame = committedCropFrame(in: canvasSize, visibleImageSize: displayGeometry.visibleImageSize)
 
             ZStack {
                 ZStack(alignment: .bottom) {
@@ -140,18 +139,23 @@ private extension PhotoEditor {
 
                     if hasAvailableAdjustments {
                         ControlsView(
-                            edits: $draftEdits,
+                            edits: controlsEdits,
                             cropConstraint: $draftEdits.cropConstraint,
                             photoEditConfiguration: photoEditConfiguration,
                             selectedAdjustment: $selectedAdjustment,
                             selectedSection: $selectedSection,
                             onSelectCropConstraint: { constraint in
-                                applyCropConstraint(
+                                applyAspectRatioConstraint(
                                     constraint,
-                                    from: currentCropFrame,
-                                    geometrySize: canvasSize,
-                                    visibleImageSize: visibleImageSize
+                                    to: currentCropFrame,
+                                    inCanvas: canvasSize,
+                                    displaySize: displayGeometry.visibleImageSize
                                 )
+                            },
+                            onRotate: { direction in
+                                withAnimation(.snappy(duration: 0.25)) {
+                                    rotateByQuarterTurn(direction: direction, in: canvasSize)
+                                }
                             }
                         )
                         .zIndex(1)
@@ -176,8 +180,10 @@ private extension PhotoEditor {
 
     @ViewBuilder
     func adjustCanvas(geometrySize: CGSize, cropFrame: CGRect) -> some View {
-        let fittedSize = aspectFitSize(for: image.size, in: geometrySize)
-        let baseScale = rotationFitScale(for: fittedSize, angle: draftEdits.rotation)
+        let displayGeometry = displayGeometry(in: geometrySize)
+        let fittedSize = displayGeometry.fittedSize
+        let renderSize = displayGeometry.renderSize
+        let baseScale = LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: displayGeometry.tiltRotation)
         let cropCenterOffset = CGSize(
             width: cropFrame.midX - (geometrySize.width / 2),
             height: cropFrame.midY - (geometrySize.height / 2)
@@ -191,17 +197,22 @@ private extension PhotoEditor {
         )
 
         ZStack {
+            let _ = {
+                Self.log("baseScale=\(baseScale), cropScale=\(cropScale), total=\(baseScale * cropScale)")
+            }()
             Color.black
 
             adjustPreviewImage(targetSize: geometrySize)
                 .resizable()
                 .scaledToFit()
-                .scaleEffect(baseScale * cropScale)
+                .frame(width: renderSize.width, height: renderSize.height)
+                .scaleEffect(baseScale)
                 .rotationEffect(draftEdits.rotation)
                 .offset(
-                    x: -cropCenterOffset.width * cropScale,
-                    y: -cropCenterOffset.height * cropScale
+                    x: -cropCenterOffset.width,
+                    y: -cropCenterOffset.height
                 )
+                .scaleEffect(cropScale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .mask {
                     Rectangle()
@@ -218,49 +229,24 @@ private extension PhotoEditor {
 // MARK: - Crop State
 
 private extension PhotoEditor {
-    func aspectFitSize(for imageSize: CGSize, in containerSize: CGSize) -> CGSize {
-        guard
-            imageSize.width > 0,
-            imageSize.height > 0,
-            containerSize.width > 0,
-            containerSize.height > 0
-        else {
-            return .zero
-        }
 
-        let widthScale = containerSize.width / imageSize.width
-        let heightScale = containerSize.height / imageSize.height
-        let scale = min(widthScale, heightScale)
+    var controlsEdits: Binding<LosslessEdits> {
+        Binding(
+            get: {
+                var controlEdits = draftEdits
+                controlEdits.rotation = draftEdits.rotation - draftEdits.rotation.nearestQuarterTurn
+                return controlEdits
+            },
+            set: { newValue in
+                let layoutRotation = draftEdits.rotation.nearestQuarterTurn
+                let incomingTiltRotation = newValue.rotation - newValue.rotation.nearestQuarterTurn
 
-        return CGSize(
-            width: imageSize.width * scale,
-            height: imageSize.height * scale
+                var updatedEdits = newValue
+                updatedEdits.rotation = layoutRotation + incomingTiltRotation
+                draftEdits = updatedEdits
+            }
         )
     }
-
-    func rotationFitScale(for size: CGSize, angle: Angle) -> CGFloat {
-        guard size.width > 0, size.height > 0 else { return 1 }
-
-        let rotatedSize = rotatedBoundingSize(for: size, angle: angle)
-        guard rotatedSize.width > 0, rotatedSize.height > 0 else { return 1 }
-
-        let horizontalScale = size.width / rotatedSize.width
-        let verticalScale = size.height / rotatedSize.height
-
-        return min(horizontalScale, verticalScale, 1)
-    }
-
-    func rotatedBoundingSize(for size: CGSize, angle: Angle) -> CGSize {
-        let radians = angle.radians
-        let absoluteCosine = abs(cos(radians))
-        let absoluteSine = abs(sin(radians))
-
-        return CGSize(
-            width: size.width * absoluteCosine + size.height * absoluteSine,
-            height: size.width * absoluteSine + size.height * absoluteCosine
-        )
-    }
-
     func adjustPreviewImage(targetSize: CGSize) -> Image {
         if let adjustedImage = image.applyingColorAdjustments(using: draftEdits, targetSize: targetSize) {
             return Image(uiImage: adjustedImage)
@@ -282,25 +268,32 @@ private extension PhotoEditor {
 
     func committedCropFrame(in geometrySize: CGSize, visibleImageSize: CGSize) -> CGRect {
         if let crop = draftEdits.crop?.standardized,
-           crop.width > minimumStoredCropDimension,
-           crop.height > minimumStoredCropDimension {
-            return LosslessEditGeometry.croppedFrame(from: crop, in: geometrySize, visibleImageSize: visibleImageSize)
+           crop.width > Self.minimumStoredCropDimension,
+           crop.height > Self.minimumStoredCropDimension {
+            return LosslessEditGeometry.croppedFrame(
+                from: crop,
+                in: geometrySize,
+                visibleImageSize: visibleImageSize
+            )
         }
 
+        let displayGeometry = displayGeometry(in: geometrySize)
         return LosslessEditGeometry.uncroppedFrame(
             in: geometrySize,
             visibleImageSize: visibleImageSize,
-            rotation: draftEdits.rotation
+            rotation: displayGeometry.tiltRotation
         )
     }
 
-    func applyCropConstraint(
+    func applyAspectRatioConstraint(
         _ constraint: CropConstraint,
-        from cropFrame: CGRect,
-        geometrySize: CGSize,
-        visibleImageSize: CGSize
+        to cropFrame: CGRect,
+        inCanvas geometrySize: CGSize,
+        displaySize visibleImageSize: CGSize
     ) {
         draftEdits.cropConstraint = constraint
+
+        let displayGeometry = displayGeometry(in: geometrySize)
 
         let updatedCropFrame: CGRect
         if let ratio = constraint.ratio {
@@ -314,7 +307,7 @@ private extension PhotoEditor {
             moving: .all,
             within: CGRect(origin: .zero, size: geometrySize),
             visibleImageSize: visibleImageSize,
-            rotation: draftEdits.rotation,
+            rotation: displayGeometry.tiltRotation,
             cropConstraint: constraint
         )
 
@@ -350,6 +343,100 @@ private extension PhotoEditor {
     }
 }
 
+// MARK: - Rotation Helpers
+private extension PhotoEditor {
+    func rotateByQuarterTurn(direction: RotationDirection, in canvasSize: CGSize) {
+        let hasStoredCrop = draftEdits.crop?.standardized.width ?? 0 > Self.minimumStoredCropDimension
+            && draftEdits.crop?.standardized.height ?? 0 > Self.minimumStoredCropDimension
+
+        guard hasStoredCrop, let crop = draftEdits.crop?.standardized else {
+            draftEdits.rotation = .degrees(draftEdits.rotation.degrees + Double(direction.rawValue * 90))
+            draftEdits.crop = nil
+            return
+        }
+
+        let currentDisplaySize = displayGeometry(in: canvasSize).visibleImageSize
+        let currentCanvasCrop = LosslessEditGeometry.croppedFrame(
+            from: crop,
+            in: canvasSize,
+            visibleImageSize: currentDisplaySize
+        )
+
+        let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+        let rotatedCanvasCrop = rotateAxisAlignedRect90(currentCanvasCrop, around: center, direction: direction)
+
+        draftEdits.rotation = .degrees(draftEdits.rotation.degrees + Double(direction.rawValue * 90))
+
+        let newDisplayGeometry = displayGeometry(in: canvasSize)
+        let newDisplaySize = newDisplayGeometry.visibleImageSize
+        let bounds = CropBounds(
+            in: CGRect(origin: .zero, size: canvasSize),
+            visibleImageSize: newDisplaySize,
+            rotation: newDisplayGeometry.tiltRotation
+        )
+        let clamped = bounds.clamped(rotatedCanvasCrop)
+
+        draftEdits.crop = LosslessEditGeometry.normalizedCrop(
+            from: clamped,
+            in: canvasSize,
+            visibleImageSize: newDisplaySize
+        )
+    }
+
+    /// Rotates an axis-aligned rect by ±90° around a center, returning an axis-aligned rect.
+    func rotateAxisAlignedRect90(_ rect: CGRect, around center: CGPoint, direction: RotationDirection) -> CGRect {
+        // Translate rect center relative to canvas center
+        let dx = rect.midX - center.x
+        let dy = rect.midY - center.y
+
+        // Rotate center by ±90°: +90° -> (-y, x), -90° -> (y, -x)
+        let rotatedCenter: CGPoint = direction.rawValue > 0
+            ? CGPoint(x: center.x - dy, y: center.y + dx)
+            : CGPoint(x: center.x + dy, y: center.y - dx)
+
+        // Swap width/height for 90° rotations
+        let newSize = CGSize(width: rect.height, height: rect.width)
+
+        return CGRect(
+            x: rotatedCenter.x - newSize.width / 2,
+            y: rotatedCenter.y - newSize.height / 2,
+            width: newSize.width,
+            height: newSize.height
+        ).standardized
+    }
+}
+
+// MARK: - Display Geometry Helpers
+
+private extension PhotoEditor {
+    struct DisplayGeometry {
+        let layoutRotation: Angle
+        let tiltRotation: Angle
+        let fittedSize: CGSize
+        let visibleImageSize: CGSize
+
+        var renderSize: CGSize {
+            fittedSize.rotatedForLayout(by: -layoutRotation)
+        }
+    }
+
+    func displayGeometry(in canvasSize: CGSize, rotation: Angle? = nil) -> DisplayGeometry {
+        let rotation = rotation ?? draftEdits.rotation
+        let layoutRotation = rotation.nearestQuarterTurn
+        let tiltRotation = rotation - layoutRotation
+        let layoutImageSize = image.size.rotatedForLayout(by: layoutRotation)
+        let fittedSize = LosslessEditGeometry.aspectFitSize(for: layoutImageSize, in: canvasSize)
+        let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: tiltRotation)
+
+        return DisplayGeometry(
+            layoutRotation: layoutRotation,
+            tiltRotation: tiltRotation,
+            fittedSize: fittedSize,
+            visibleImageSize: visibleImageSize
+        )
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
@@ -358,5 +445,42 @@ private extension PhotoEditor {
             .constant(LosslessEdits(crop: nil, rotation: .zero)),
             image: image
         )
+    }
+}
+
+private extension CGSize {
+    func rotatedForLayout(by angle: Angle) -> CGSize {
+        switch angle.normalizedQuarterTurns {
+        case 1, 3:
+            return CGSize(width: height, height: width)
+        default:
+            return self
+        }
+    }
+}
+
+private extension Angle {
+    static prefix func - (angle: Angle) -> Angle {
+        .degrees(-angle.degrees)
+    }
+
+    static func - (lhs: Angle, rhs: Angle) -> Angle {
+        .degrees(lhs.degrees - rhs.degrees)
+    }
+
+    static func + (lhs: Angle, rhs: Angle) -> Angle {
+        .degrees(lhs.degrees + rhs.degrees)
+    }
+
+    var nearestQuarterTurn: Angle {
+        .degrees(Double(roundedQuarterTurns) * 90)
+    }
+
+    var normalizedQuarterTurns: Int {
+        ((roundedQuarterTurns % 4) + 4) % 4
+    }
+
+    private var roundedQuarterTurns: Int {
+        Int((degrees / 90).rounded())
     }
 }

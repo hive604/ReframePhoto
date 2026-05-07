@@ -28,22 +28,36 @@ struct CroppingView: View {
     }
 
     var body: some View {
-        let fittedSize = LosslessEditGeometry.aspectFitSize(for: image.size, in: canvasSize)
-        let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: edits.rotation)
+        let layoutRotation = edits.rotation.nearestQuarterTurn
+        let tiltRotation = edits.rotation - layoutRotation
+        let renderRotation = edits.rotation
+        let layoutImageSize = image.size.rotatedForLayout(by: layoutRotation)
+        let fittedSize = LosslessEditGeometry.aspectFitSize(for: layoutImageSize, in: canvasSize)
+        let visibleImageSize = LosslessEditGeometry.visibleImageSize(for: fittedSize, angle: tiltRotation)
         let currentCropFrame = effectiveCropFrame(visibleImageSize: visibleImageSize)
 
         ZStack {
-            baseImage(fittedSize: fittedSize)
+            baseImage(
+                fittedSize: fittedSize,
+                renderRotation: renderRotation,
+                layoutRotation: layoutRotation,
+                tiltRotation: tiltRotation
+            )
 
             if blurRadius > 0 || desaturateAmount > 0 {
-                outsideCropEffectImage(fittedSize: fittedSize)
-                    .mask(
-                        CropDimmedAreaShape(
-                            outerRect: cropWorkspaceRect,
-                            cropRect: currentCropFrame
-                        )
-                        .fill(style: FillStyle(eoFill: true, antialiased: false))
+                outsideCropEffectImage(
+                    fittedSize: fittedSize,
+                    renderRotation: renderRotation,
+                    layoutRotation: layoutRotation,
+                    tiltRotation: tiltRotation
+                )
+                .mask(
+                    CropDimmedAreaShape(
+                        outerRect: cropWorkspaceRect,
+                        cropRect: currentCropFrame
                     )
+                    .fill(style: FillStyle(eoFill: true, antialiased: false))
+                )
             }
 
             CropDimmedAreaShape(
@@ -87,6 +101,10 @@ struct CroppingView: View {
             cropCornerHandle(.bottomRight, cropFrame: currentCropFrame, visibleImageSize: visibleImageSize)
         }
         .frame(width: canvasSize.width, height: canvasSize.height)
+        .onChange(of: edits.rotation) { _, _ in
+            draftCropFrame = nil
+            cropGestureStartFrame = nil
+        }
         .onChange(of: edits.cropConstraint) { _, _ in
             // External aspect-ratio changes should defer to the committed crop state.
             draftCropFrame = nil
@@ -96,6 +114,10 @@ struct CroppingView: View {
 
     private var cropWorkspaceRect: CGRect {
         CGRect(origin: .zero, size: canvasSize)
+    }
+
+    private var cropBoundsRotation: Angle {
+        edits.rotation - edits.rotation.nearestQuarterTurn
     }
 
     private func cropCornerHandle(
@@ -195,21 +217,38 @@ struct CroppingView: View {
         }
     }
 
-    private func baseImage(fittedSize: CGSize) -> some View {
-        previewImage
+    private func baseImage(
+        fittedSize: CGSize,
+        renderRotation: Angle,
+        layoutRotation: Angle,
+        tiltRotation: Angle
+    ) -> some View {
+        let renderSize = fittedSize.rotatedForLayout(by: -layoutRotation)
+        return previewImage
             .resizable()
             .border(.orange, width: photoEditConfiguration.showFrames ? 2 : 0)
             .scaledToFit()
-            .scaleEffect(LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: edits.rotation))
-            .rotationEffect(edits.rotation)
+            .frame(width: renderSize.width, height: renderSize.height)
+            .scaleEffect(LosslessEditGeometry.rotationFitScale(for: fittedSize, angle: tiltRotation))
+            .rotationEffect(renderRotation)
             .frame(width: canvasSize.width, height: canvasSize.height)
             .position(x: canvasSize.width / 2, y: canvasSize.height / 2)
     }
 
-    private func outsideCropEffectImage(fittedSize: CGSize) -> some View {
-        baseImage(fittedSize: fittedSize)
-            .saturation(max(0, 1 - desaturateAmount))
-            .blur(radius: blurRadius)
+    private func outsideCropEffectImage(
+        fittedSize: CGSize,
+        renderRotation: Angle,
+        layoutRotation: Angle,
+        tiltRotation: Angle
+    ) -> some View {
+        baseImage(
+            fittedSize: fittedSize,
+            renderRotation: renderRotation,
+            layoutRotation: layoutRotation,
+            tiltRotation: tiltRotation
+        )
+        .saturation(max(0, 1 - desaturateAmount))
+        .blur(radius: blurRadius)
     }
 
     private func beginCropGesture(from cropFrame: CGRect) {
@@ -236,7 +275,7 @@ struct CroppingView: View {
         return LosslessEditGeometry.uncroppedFrame(
             in: canvasSize,
             visibleImageSize: visibleImageSize,
-            rotation: edits.rotation
+            rotation: cropBoundsRotation
         )
     }
 
@@ -250,7 +289,7 @@ struct CroppingView: View {
             moving: moving,
             within: cropWorkspaceRect,
             visibleImageSize: visibleImageSize,
-            rotation: edits.rotation,
+            rotation: cropBoundsRotation,
             cropConstraint: edits.cropConstraint
         )
         commitCropFrame(constrained, visibleImageSize: visibleImageSize)
@@ -270,7 +309,7 @@ struct CroppingView: View {
         CropBounds(
             in: cropWorkspaceRect,
             visibleImageSize: visibleImageSize,
-            rotation: edits.rotation
+            rotation: cropBoundsRotation
         )
     }
 
@@ -341,6 +380,44 @@ struct CroppingView: View {
     private var previewImage: Image {
         let adjustedImage = image.applyingColorAdjustments(using: edits, targetSize: canvasSize) ?? image
         return Image(uiImage: adjustedImage)
+    }
+}
+
+private extension CGSize {
+    func rotatedForLayout(by angle: Angle) -> CGSize {
+        let normalizedQuarterTurns = angle.normalizedQuarterTurns
+        switch normalizedQuarterTurns {
+        case 1, 3:
+            return CGSize(width: height, height: width)
+        default:
+            return self
+        }
+    }
+}
+
+private extension Angle {
+    static prefix func - (angle: Angle) -> Angle {
+        .degrees(-angle.degrees)
+    }
+
+    static func - (lhs: Angle, rhs: Angle) -> Angle {
+        .degrees(lhs.degrees - rhs.degrees)
+    }
+
+    static func + (lhs: Angle, rhs: Angle) -> Angle {
+        .degrees(lhs.degrees + rhs.degrees)
+    }
+
+    var nearestQuarterTurn: Angle {
+        .degrees(Double(roundedQuarterTurns) * 90)
+    }
+
+    var normalizedQuarterTurns: Int {
+        ((roundedQuarterTurns % 4) + 4) % 4
+    }
+
+    private var roundedQuarterTurns: Int {
+        Int((degrees / 90).rounded())
     }
 }
 

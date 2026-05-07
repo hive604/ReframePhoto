@@ -131,6 +131,7 @@ struct ControlsView: View {
     @Binding var selectedAdjustment: PhotoEditConfiguration.Adjustment
     @Binding var selectedSection: AdjustmentSection
     let onSelectCropConstraint: (CropConstraint) -> Void
+    let onRotate: (RotationDirection) -> Void
 
     @ScaledMetric private var valueWidth = 52
     @ScaledMetric(relativeTo: .caption2) private var panelWidth: CGFloat = 520
@@ -251,6 +252,25 @@ struct ControlsView: View {
     private var activeCompactControl: some View {
         if selectedAdjustment == .crop {
             aspectRatioRow
+        } else if selectedAdjustment == .tilt {
+            VStack(alignment: .leading, spacing: rowSpacing) {
+                adjustmentSlider(for: .tilt)
+                HStack(spacing: 12) {
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { onRotate(.counterClockwise) }
+                    } label: {
+                        Label("Rotate Left", systemImage: "rotate.left")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { onRotate(.clockwise) }
+                    } label: {
+                        Label("Rotate Right", systemImage: "rotate.right")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
         } else if availableAdjustments.contains(selectedAdjustment) {
             adjustmentSlider(for: selectedAdjustment)
         }
@@ -307,6 +327,24 @@ struct ControlsView: View {
             }
             .buttonStyle(.plain)
 
+            if horizontalSizeClass == .regular {
+                Spacer(minLength: 8)
+                HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { onRotate(.counterClockwise) }
+                    } label: {
+                        Label("Rotate Left", systemImage: "rotate.left")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { onRotate(.clockwise) }
+                    } label: {
+                        Label("Rotate Right", systemImage: "rotate.right")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
         }
     }
 
